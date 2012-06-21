@@ -1,0 +1,6 @@
+Library code for transparently reading from different sequence file formats
+
+== Build ==
+To build the test code:
+
+$ make
