@@ -30,7 +30,8 @@ typedef enum SequenceFileType SequenceFileType;
 typedef struct
 {
   STRING_BUFFER *name, *seq, *qual;
-  int start, length;
+  int offset;
+  char valid_qual;
 } Sequence;
 
 enum SequenceFileType
@@ -39,25 +40,27 @@ enum SequenceFileType
   SEQ_SAM = 4, SEQ_BAM = 5,
 };
 
-char* seq_file_types[6];
-
 // For creating/destroying struct for result
 Sequence* seq_init();
 void seq_destroy(Sequence* sequence);
 
 SequenceFile* seq_file_open(const char* path);
+SequenceFile* seq_file_open_filetype(const char* file_path,
+                                     const SequenceFileType file_type);
+
 void seq_file_close(SequenceFile* file);
 
-void seq_file_force_type(SequenceFile* file, SequenceFileType);
 SequenceFileType seq_file_get_type(const SequenceFile* file);
+const char* seq_file_get_type_str(const SequenceFile* file);
 
-// Get a pointer to the file path (please don't modify it!)
 const char* seq_file_get_path(const SequenceFile* file);
 
 // Returns 0 if at end of file; 1 otherwise
 char seq_file_read(SequenceFile* file, Sequence* sequence);
 
+//
 // Kmer reader
+//
 SequenceKmerReader* seq_file_get_kmer_reader(SequenceFile* file, int kmer_size);
 
 // Returns 0 if at end of file; 1 otherwise

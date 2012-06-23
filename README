@@ -1,6 +1,29 @@
-Library code for transparently reading from different sequence file formats
+Library for reading multiple sequence file formats
+
+https://github.com/noporpoise/seq_reader
+
+Isaac Turner
+turner.isaac@gmail.com
+
+== About ==
+
+The aim is to provide a library that allows programs to transparently read
+sequence data from multiple file formats, without having to worry about the
+format.  Pass a file to seq_file_open() and then read sequences using
+seq_file_read() without having to worry about what the file format is.  
+
+Currently supports:
+- SAM & BAM
+- FASTA (& gzipped fasta)
+- FASTQ (& gzipped fastq)
+- 'plain' format (one sequence per line) (& gzipped plain)
 
 == Build ==
 To build the test code:
 
 $ make
+
+== Development ==
+
+Please get in touch if you find bugs, have questions or can suggest features.  
+Isaac <turner.isaac@gmail.com>

@@ -33,7 +33,8 @@
 
 int8_t seq_comp_table[16] = {0,8,4,12,2,10,9,14,1,6,5,13,3,11,7,15};
 
-char* seq_file_types[] = {"Unknown", "FASTA", "FASTQ", "Plain", "SAM", "BAM"};
+const char* seq_file_types[6]
+  = {"Unknown", "FASTA", "FASTQ", "Plain", "SAM", "BAM"};
 
 struct SequenceFile
 {
@@ -52,6 +53,15 @@ struct SequenceKmerReader
 {
   SequenceFile* file;
   int kmer_size;
+
+  // entry offset
+  int offset;
+
+  // have we seen a '>' at the start of a line in a fasta file?
+  char read_line_start;
+
+  // need to read in whole entry for sam/bam and fastq
+  Sequence* whole_entry;
 };
 
 // For creating/destroying struct for result
@@ -63,8 +73,8 @@ Sequence* seq_init()
   sequence->seq = string_buff_init(100);
   sequence->qual = string_buff_init(100);
 
-  sequence->start = 0;
-  sequence->length = 0;
+  sequence->offset = 0;
+  sequence->valid_qual = 0;
 
   return sequence;
 }
@@ -84,7 +94,7 @@ void _set_seq_filetype(SequenceFile* file)
   {
     if(strcasecmp(".sam", file->path+path_len - 4) == 0)
     {
-      file->sam_file = samopen(file->path, "rs", 0);
+      file->sam_file = samopen(file->path, "r", 0);
       file->bam = bam_init1();
       file->file_type = SEQ_SAM;
       return;
@@ -147,31 +157,30 @@ void _set_seq_filetype(SequenceFile* file)
   }
 }
 
-void seq_file_force_type(SequenceFile* file, SequenceFileType file_type)
+SequenceFile* seq_file_open(const char* file_path)
 {
-  // Check if no changes are needed
-  if((file->file_type == SEQ_SAM || file->file_type == SEQ_BAM) ==
-     (file_type == SEQ_SAM       || file_type == SEQ_BAM))
-  {
-    file->file_type = file_type;
-    return;
-  }
+  SequenceFile* file = (SequenceFile*) malloc(sizeof(SequenceFile));
+  file->path = file_path;
+  file->gz_file = NULL;
+  file->file_type = SEQ_UNKNOWN;
+  file->sam_file = NULL;
+  file->bam = NULL;
 
-  // Clean up prev method
-  if(file_type == SEQ_SAM || file_type == SEQ_BAM)
-  {
-    if(file->gz_file != NULL)
-    {
-      gzclose(file->gz_file);
-    }
-  }
-  else if(file->sam_file != NULL)
-  {
-    bam_destroy1(file->bam);
-    samclose(file->sam_file);
-  }
+  _set_seq_filetype(file);
 
-  // Open for reading
+  return file;
+}
+
+SequenceFile* seq_file_open_filetype(const char* file_path,
+                                     const SequenceFileType file_type)
+{
+  SequenceFile* file = (SequenceFile*) malloc(sizeof(SequenceFile));
+  file->path = file_path;
+  file->gz_file = NULL;
+  file->file_type = file_type;
+  file->sam_file = NULL;
+  file->bam = NULL;
+
   switch(file_type)
   {
     case SEQ_SAM:
@@ -193,26 +202,17 @@ void seq_file_force_type(SequenceFile* file, SequenceFileType file_type)
       {
         file->gz_file = gzopen(file->path, "r");
       }
-    default:
       break;
+    default:
+      fprintf(stderr, "seq_reader.c - seq_file_open_filetype(): "
+                      "invalid SequenceFileType\n");
+      free(file);
+      return NULL;
   }
-
-  file->file_type = file_type;
-}
-
-SequenceFile* seq_file_open(const char* file_path)
-{
-  SequenceFile* file = (SequenceFile*) malloc(sizeof(SequenceFile));
-  file->path = file_path;
-  file->gz_file = NULL;
-  file->file_type = SEQ_UNKNOWN;
-  file->sam_file = NULL;
-  file->bam = NULL;
-
-  _set_seq_filetype(file);
 
   return file;
 }
+
 
 void seq_file_close(SequenceFile* file)
 {
@@ -233,6 +233,11 @@ void seq_file_close(SequenceFile* file)
 SequenceFileType seq_file_get_type(const SequenceFile* file)
 {
   return file->file_type;
+}
+
+const char* seq_file_get_type_str(const SequenceFile* file)
+{
+  return seq_file_types[file->file_type];
 }
 
 // Get a pointer to the file path
@@ -313,6 +318,10 @@ char _read_fastq_entry(SequenceFile* file, Sequence* sequence)
     fprintf(stderr, "Sequence: '%s'\n", sequence->seq->buff);
     fprintf(stderr, "Quality : '%s'\n", sequence->qual->buff);
   }
+  else
+  {
+    sequence->valid_qual = 1;
+  }
 
   return 1;
 }
@@ -377,6 +386,8 @@ char _read_fasta_entry(SequenceFile* file, Sequence* sequence)
       }
     }
   }
+
+  sequence->valid_qual = 0;
 
   return 1;
 }
@@ -447,8 +458,21 @@ char _read_bam_entry(SequenceFile* file, Sequence* sequence)
         str[i] = 33 + seq[i];
     }
 
+    sequence->valid_qual = 0;
+
+    // Check if the quality string has any values set    
+    for (i = 0; i < qlen; i++)
+    {
+      if(str[i] != '?')
+      {
+        sequence->valid_qual = 1;
+        break;
+      }
+    }
+
     return 1;
   }
+
   return 0;
 }
 
@@ -496,8 +520,7 @@ char seq_file_read(SequenceFile* file, Sequence* sequence)
       return 0;
   }
 
-  sequence->start = 0;
-  sequence->length = string_buff_strlen(sequence->seq);
+  sequence->offset = 0;
 
   return success;
 }
@@ -510,13 +533,256 @@ SequenceKmerReader* seq_file_get_kmer_reader(SequenceFile* file, int kmer_size)
 
   reader->file = file;
   reader->kmer_size = kmer_size;
+  reader->offset = 0;
+  reader->read_line_start = 0;
+
+  switch(file->file_type)
+  {
+    case SEQ_SAM:
+    case SEQ_BAM:
+    case SEQ_FASTQ:
+      reader->whole_entry = seq_init();
+    default:
+      break;
+  }
 
   return reader;
+}
+
+void _reset_sequence(Sequence* sequence)
+{
+  string_buff_reset(sequence->name);
+  string_buff_reset(sequence->seq);
+  string_buff_reset(sequence->qual);
+  sequence->offset = 0;
+}
+
+void _shift_insert_char(STRING_BUFFER* str, char c)
+{
+  memmove(str->buff, str->buff+1, str->len-1);
+  str->buff[str->len-1] = c;
+}
+
+// Read an entry from a FASTA file
+// Returns 1 if a header is read, 0 otherwise
+char _read_fasta_entry_kmer(SequenceKmerReader* reader, Sequence* sequence)
+{
+  size_t kmer_size = reader->kmer_size;
+  int c;
+
+  if(reader->read_line_start == 1)
+  {
+    c = '>';
+  }
+  else
+  {
+    while((c = gzgetc(reader->file->gz_file)) != -1 && (c == '\n' || c == '\r'));
+
+    if(c == -1)
+    {
+      _reset_sequence(sequence);
+      return 0;
+    }
+  }
+
+  if(string_buff_strlen(sequence->seq) == kmer_size && c != '>')
+  {
+    // Append
+    _shift_insert_char(sequence->seq, (char)c);
+    reader->offset++;
+  }
+  else
+  {
+    // Read new
+    if(c != '>')
+    {
+      fprintf(stderr, "seq_reader.c - read_fasta_entry_kmer(): expected "
+                      "line to start '>'");
+      _reset_sequence(sequence);
+      return 0;
+    }
+
+    _reset_sequence(sequence);
+
+    reader->offset = 0;
+    reader->read_line_start = 0;
+
+    // Read name
+    string_buff_gzreadline(sequence->name, reader->file->gz_file);
+    string_buff_chomp(sequence->name);
+
+    // Read sequence
+    c = gzgetc(reader->file->gz_file);
+    
+    if(c == -1)
+    {
+      // No sequence with name, but still success
+      return 1;
+    }
+    else if(c == '>')
+    {
+      // No sequence with name, but still success
+      reader->read_line_start = 1;
+      return 1;
+    }
+    else
+    {
+      string_buff_append_char(sequence->seq, c);
+    }
+
+    t_buf_pos remaining_bases;
+
+    while((remaining_bases = kmer_size - string_buff_strlen(sequence->seq)) > 0)
+    {
+      string_buff_gzread(sequence->seq, reader->file->gz_file, remaining_bases);
+      string_buff_chomp(sequence->name);
+    }
+  }
+
+  sequence->offset = reader->offset;
+
+  return 1;
+}
+
+// Read an entry from a SAM/BAM file
+// Returns 1 if a line is read, 0 otherwise
+char _read_plain_entry_kmer(SequenceKmerReader* reader, Sequence* sequence)
+{
+  // Plain is one per sequence
+  // Read a single char
+  int c;
+  
+  if((c = gzgetc(reader->file->gz_file)) != -1)
+  {
+    _reset_sequence(sequence);
+    return 0;
+  }
+
+  if(string_buff_strlen(sequence->seq) == reader->kmer_size &&
+     c != '\n' && c != '\r')
+  {
+    // Append
+    _shift_insert_char(sequence->seq, (char)c);
+    reader->offset++;
+  }
+  else
+  {
+    // Read new
+    _reset_sequence(sequence);
+    reader->offset = 0;
+
+    while(string_buff_strlen(sequence->seq) < reader->kmer_size)
+    {
+      if(string_buff_gzread(sequence->seq,
+                            reader->file->gz_file,
+                            reader->kmer_size) == 0)
+      {
+        // No characters read
+        _reset_sequence(sequence);
+        return 0;
+      }
+
+      string_buff_chomp(sequence->seq);
+    }
+  }
+
+  sequence->offset = reader->offset;
+
+  return 1;
+}
+
+// Read SAM/BAM or FASTQ
+char _read_whole_entry_kmer(SequenceKmerReader* reader, Sequence* sequence)
+{
+  // Need to read in a whole sequence for these ones
+  char read_new_entry = 0;
+
+  if(string_buff_strlen(reader->whole_entry->seq) > 0)
+  {
+    // If we've read in a sequence, advance the offset
+    reader->offset++;
+  }
+
+  while(reader->offset + reader->kmer_size >
+        string_buff_strlen(reader->whole_entry->seq))
+  {
+    _reset_sequence(reader->whole_entry);
+
+    reader->offset = 0;
+
+    if(reader->file->file_type == SEQ_FASTQ)
+    {
+      read_new_entry = _read_fastq_entry(reader->file, reader->whole_entry);
+    }
+    else
+    {
+      // SAM or BAM
+      read_new_entry = _read_bam_entry(reader->file, reader->whole_entry);
+    }
+
+    if(!read_new_entry)
+    {
+      _reset_sequence(sequence);
+      return 0;
+    }
+  }
+
+  if(read_new_entry)
+  {
+    _reset_sequence(sequence);
+
+    // copy name
+    string_buff_copy(sequence->name, 0, reader->whole_entry->name, 0,
+                     string_buff_strlen(reader->whole_entry->name));
+    // copy sequence
+    string_buff_copy(sequence->seq, 0, reader->whole_entry->seq, 0,
+                     reader->kmer_size);
+    // copy quality
+    if(string_buff_strlen(reader->whole_entry->qual) > 0)
+    {
+      string_buff_copy(sequence->qual, 0, reader->whole_entry->qual, 0,
+                       reader->kmer_size);
+    }
+    return 1;
+  }
+  else
+  {
+    // append
+    t_buf_pos pos = reader->offset + reader->kmer_size - 1;
+    char next;
+
+    next = string_buff_get_char(reader->whole_entry->seq, pos);
+    _shift_insert_char(sequence->seq, next);
+
+    next = string_buff_get_char(reader->whole_entry->qual, pos);
+    _shift_insert_char(sequence->qual, next);
+
+    sequence->offset = reader->offset;
+    return 1;
+  }
 }
 
 // Returns 0 if at end of file; 1 otherwise
 char seq_file_read_kmer(SequenceKmerReader* reader, Sequence* sequence)
 {
-  // DEV:
-  return 0;
+  SequenceFileType file_type = reader->file->file_type;
+
+  if(file_type == SEQ_SAM || file_type == SEQ_BAM || file_type == SEQ_FASTQ)
+  {
+    return _read_whole_entry_kmer(reader, sequence);
+  }
+  else if(file_type == SEQ_FASTA)
+  {
+    return _read_fasta_entry_kmer(reader, sequence);
+  }
+  else if(file_type == SEQ_PLAIN)
+  {
+    return _read_plain_entry_kmer(reader, sequence);
+  }
+  else
+  {
+    fprintf(stderr, "seq_reader.c warning: "
+                      "tried to read from unknown filetype\n");
+    return 0;
+  }
 }

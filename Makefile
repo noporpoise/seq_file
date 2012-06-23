@@ -1,5 +1,7 @@
 ifdef DEBUG
-	FLAGS=-DDEBUG=1 --debug
+	CFLAGS:=-DDEBUG=1 --debug
+else
+	CFLAGS:=-O3
 endif
 
 LIB_PATH=$(HOME)/c/libs/
@@ -11,17 +13,19 @@ SAMPATH=$(HOME)/bioinf/samtools-0.1.18
 UNAME := $(shell uname)
 
 ifeq ($(UNAME), Darwin)
-	FLAGS := $(FLAGS) -fnested-functions
+	CFLAGS := $(FLAGS) -fnested-functions
 endif
 
-FLAGS := $(FLAGS) -Wall -I$(SAMPATH) -L$(SAMPATH) -lbam -lm -lz
+CFLAGS := $(CFLAGS) -Wall -I$(SAMPATH) -L$(SAMPATH) -I $(STRING_BUF_PATH)
+LIB_FLAGS := -lbam -lm -lz
 
 all:
-	gcc -o seq_reader_test $(FLAGS) -I $(STRING_BUF_PATH) \
-	seq_reader_test.c seq_reader.c \
-	$(STRING_BUF_PATH)/string_buffer.c
+	gcc -o seq_reader.o $(CFLAGS) -c seq_reader.c 
+	gcc -o seq_reader_test $(CFLAGS) $(LIB_FLAGS) \
+	seq_reader_test.c seq_reader.o $(STRING_BUF_PATH)/string_buffer.c
 
 clean:
+	if test -e seq_reader.o; then rm seq_reader.o; fi
 	if test -e seq_reader_test; then rm seq_reader_test; fi
 	for file in $(wildcard *.dSYM); do rm -r $$file; done
 	for file in $(wildcard *.greg); do rm $$file; done
