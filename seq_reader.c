@@ -155,11 +155,13 @@ void _set_seq_filetype(SequenceFile* file)
   {
     // Reading FASTA
     file->file_type = SEQ_FASTA;
+    file->read_line_start = 1;
   }
   else if(first_char == '@')
   {
     // Reading FASTQ
     file->file_type = SEQ_FASTQ;
+    file->read_line_start = 1;
   }
   else if(is_base_char(first_char))
   {
@@ -169,13 +171,6 @@ void _set_seq_filetype(SequenceFile* file)
   {
     fprintf(stderr, "seq_reader.c warning: unknown filetype starting '%c'\n",
             first_char);
-  }
-
-  // Put char back
-  if(gzungetc(first_char, file->gz_file) == -1)
-  {
-    fprintf(stderr, "seq_reader.c warning: error recovering from "
-                    "filetype check\n");
   }
 }
 
@@ -410,7 +405,7 @@ char _read_fasta_entry(SequenceFile* file, Sequence* sequence)
   string_buff_chomp(sequence->name);
 
   // Check line doesn't begin with '>'
-  int first_char = gzgetc(file->gz_file);
+  int first_char;
 
   while((first_char = gzgetc(file->gz_file)) != -1)
   {
