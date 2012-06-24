@@ -40,10 +40,18 @@ enum SequenceFileType
   SEQ_SAM = 4, SEQ_BAM = 5,
 };
 
-// For creating/destroying struct for result
-Sequence* seq_init();
-void seq_destroy(Sequence* sequence);
+//
+// Sequence struct
+//
 
+// For creating/destroying struct for result
+Sequence* seq_create();
+void seq_reset(Sequence* sequence);
+void seq_free(Sequence* sequence);
+
+//
+// Sequence File reader
+//
 SequenceFile* seq_file_open(const char* path);
 SequenceFile* seq_file_open_filetype(const char* file_path,
                                      const SequenceFileType file_type);
@@ -59,9 +67,12 @@ const char* seq_file_get_path(const SequenceFile* file);
 char seq_file_read(SequenceFile* file, Sequence* sequence);
 
 //
-// Kmer reader
+// Sequence Kmer Reader
 //
-SequenceKmerReader* seq_file_get_kmer_reader(SequenceFile* file, int kmer_size);
+SequenceKmerReader* seq_file_kmer_reader_open(const char* path,
+                                              const int kmer_size);
+
+void seq_file_kmer_reader_close(SequenceKmerReader* reader);
 
 // Returns 0 if at end of file; 1 otherwise
 char seq_file_read_kmer(SequenceKmerReader* reader, Sequence* sequence);

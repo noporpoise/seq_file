@@ -37,7 +37,7 @@ int main(int argc, char** argv)
 
   printf(" Filepath: %s\n", file_path);
 
-  Sequence* seq = seq_init();
+  Sequence* seq = seq_create();
   SequenceFile* file = seq_file_open(file_path);
 
   //SequenceFileType file_type = seq_file_get_type(file);
@@ -52,7 +52,6 @@ int main(int argc, char** argv)
   }
 
   seq_file_close(file);
-  seq_destroy(seq);
 
   // Printing kmers
   int kmers[] = {1,10,50};
@@ -60,12 +59,8 @@ int main(int argc, char** argv)
 
   for(i = 0; i < 3; i++)
   {
-    seq = seq_init();
-    file = seq_file_open(file_path);
-
-    reader = seq_file_get_kmer_reader(file, kmers[i]);
-
     printf("kmer: %i\n", kmers[i]);
+    reader = seq_file_kmer_reader_open(file_path, kmers[i]);
 
     for(j = 0; j < 10 && seq_file_read_kmer(reader, seq); j++)
     {
@@ -73,9 +68,10 @@ int main(int argc, char** argv)
              seq->seq->buff, seq->qual->buff);
     }
 
-    seq_file_close(file);
-    seq_destroy(seq);
+    seq_file_kmer_reader_close(reader);
   }
+
+  seq_free(seq);
 
   return EXIT_SUCCESS;
 }

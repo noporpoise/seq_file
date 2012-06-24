@@ -46,6 +46,9 @@ struct SequenceFile
   samfile_t *sam_file;
   bam1_t *bam;
 
+  // have we seen a '>' at the start of a line in a fasta file?
+  char read_line_start;
+
   enum SequenceFileType file_type;
 };
 
@@ -57,15 +60,17 @@ struct SequenceKmerReader
   // entry offset
   int offset;
 
-  // have we seen a '>' at the start of a line in a fasta file?
-  char read_line_start;
-
   // need to read in whole entry for sam/bam and fastq
   Sequence* whole_entry;
 };
 
+
+//
+// Sequence struct
+//
+
 // For creating/destroying struct for result
-Sequence* seq_init()
+Sequence* seq_create()
 {
   Sequence* sequence = (Sequence*) malloc(sizeof(Sequence));
 
@@ -79,12 +84,28 @@ Sequence* seq_init()
   return sequence;
 }
 
-void seq_destroy(Sequence* sequence)
+void seq_reset(Sequence* sequence)
+{
+  string_buff_reset(sequence->name);
+  string_buff_reset(sequence->seq);
+  string_buff_reset(sequence->qual);
+  sequence->offset = 0;
+  sequence->valid_qual = 0;
+}
+
+void seq_free(Sequence* sequence)
 {
   string_buff_free(sequence->name);
   string_buff_free(sequence->seq);
   string_buff_free(sequence->qual);
+
+  free(sequence);
 }
+
+
+//
+// Sequence File reader
+//
 
 void _set_seq_filetype(SequenceFile* file)
 {
@@ -127,7 +148,7 @@ void _set_seq_filetype(SequenceFile* file)
 
   if(first_char == -1)
   {
-    fprintf(stderr, "seq_reader warning: empty sequence file\n");
+    fprintf(stderr, "seq_reader.c warning: empty sequence file\n");
     return;
   }
   else if(first_char == '>')
@@ -146,14 +167,15 @@ void _set_seq_filetype(SequenceFile* file)
   }
   else
   {
-    fprintf(stderr, "seq_reader warning: unknown filetype starting '%c'\n",
+    fprintf(stderr, "seq_reader.c warning: unknown filetype starting '%c'\n",
             first_char);
   }
 
   // Put char back
   if(gzungetc(first_char, file->gz_file) == -1)
   {
-    fprintf(stderr, "seq_reader warning: error recovering from filetype check\n");
+    fprintf(stderr, "seq_reader.c warning: error recovering from "
+                    "filetype check\n");
   }
 }
 
@@ -165,6 +187,7 @@ SequenceFile* seq_file_open(const char* file_path)
   file->file_type = SEQ_UNKNOWN;
   file->sam_file = NULL;
   file->bam = NULL;
+  file->read_line_start = 0;
 
   _set_seq_filetype(file);
 
@@ -204,8 +227,8 @@ SequenceFile* seq_file_open_filetype(const char* file_path,
       }
       break;
     default:
-      fprintf(stderr, "seq_reader.c - seq_file_open_filetype(): "
-                      "invalid SequenceFileType\n");
+      fprintf(stderr, "seq_reader.c warning: invalid SequenceFileType in "
+                      "function seq_file_open_filetype()\n");
       free(file);
       return NULL;
   }
@@ -253,70 +276,100 @@ char _read_fastq_entry(SequenceFile* file, Sequence* sequence)
 {
   // Read until we have a header line
   int c;
-  
-  do
-  {
-    c = gzgetc(file->gz_file);
-  } while(c != -1 && (c == '\n' || c == '\r'));
 
-  if(c == -1)
+  if(!file->read_line_start)
   {
-    return 0;
-  }
-  else if(c != '@')
-  {
-    fprintf(stderr, "Warning: FASTQ header does not begin with '@'\n");
+    do
+    {
+      c = gzgetc(file->gz_file);
+    } while(c != -1 && (c == '\n' || c == '\r'));
+
+    if(c == -1)
+    {
+      return 0;
+    }
+    else if(c != '@')
+    {
+      fprintf(stderr, "seq_reader.c warning: FASTQ header does not begin "
+                      "with '@'\n");
+      return 0;
+    }
+
+    file->read_line_start = 0;
   }
 
-  int read_len;
+  int first_char;
 
   // Read name
-  if((read_len = string_buff_gzreadline(sequence->name, file->gz_file)) == 0)
+  if(string_buff_gzreadline(sequence->name, file->gz_file) == 0)
   {
-    fprintf(stderr, "Warning: FASTQ missing name line (header: '%s')\n",
-            sequence->name->buff);
+    fprintf(stderr, "seq_reader.c warning: FASTQ missing name line "
+                    "[read: '%s']\n", sequence->name->buff);
+    return 0;
   }
 
   string_buff_chomp(sequence->name);
 
   // Read sequence
-  if((read_len = string_buff_gzreadline(sequence->seq, file->gz_file)) == 0)
+  while((first_char = gzgetc(file->gz_file)) != -1 && first_char != '+')
   {
-    fprintf(stderr, "Warning: FASTQ missing sequence line (header: '%s')\n",
-            sequence->seq->buff);
+    if(first_char != '\n' && first_char != '\r')
+    {
+      string_buff_append_char(sequence->seq, first_char);
+      string_buff_gzreadline(sequence->seq, file->gz_file);
+      string_buff_chomp(sequence->seq);
+    }
   }
 
-  string_buff_chomp(sequence->seq);
-
-  // Read skip line ('+')
-  // Use quality buffer as temp buff to read in skip line
-  if((read_len = string_buff_gzreadline(sequence->qual, file->gz_file)) == 0 ||
-     string_buff_get_char(sequence->qual, 0) != '+')
+  if(string_buff_strlen(sequence->seq) == 0)
   {
-    string_buff_chomp(sequence->qual);
-    fprintf(stderr, "Warning: FASTQ skip line does not begin with '+' "
-                    "(read name: '%s', skip line: '%s')\n",
-            sequence->name->buff, sequence->qual->buff);
+    fprintf(stderr, "seq_reader.c warning: FASTQ missing sequence line "
+                    "[read: '%s']\n", sequence->name->buff);
+    return 0;
+  }
+  else if(first_char == -1)
+  {
+    fprintf(stderr, "seq_reader.c warning: FASTQ ended prematurely "
+                    "[read: '%s']\n", sequence->name->buff);
+    return 0;
+  }
+  else if(first_char != '+')
+  {
+    fprintf(stderr, "seq_reader.c warning: FASTQ separator '+' missing "
+                    "[read: '%s']\n", sequence->name->buff);
+    return 0;
   }
 
-  string_buff_reset(sequence->qual);
-
-  // Now read quality line
-  read_len = string_buff_gzreadline(sequence->qual, file->gz_file);
-  string_buff_chomp(sequence->qual);
-
-  if(read_len == 0)
+  // Read quality line
+  while((first_char = gzgetc(file->gz_file)) != -1 &&
+        string_buff_strlen(sequence->qual) < string_buff_strlen(sequence->seq))
   {
-    fprintf(stderr, "Warning: FASTQ is missing a quality line\n");
+    if(first_char != '\n' && first_char != '\r')
+    {
+      string_buff_append_char(sequence->qual, first_char);
+      string_buff_gzreadline(sequence->qual, file->gz_file);
+      string_buff_chomp(sequence->qual);
+    }
+  }
+  
+  if(first_char == '@')
+  {
+    file->read_line_start = 1;
+  }
+
+  if(string_buff_strlen(sequence->qual) == 0)
+  {
+    fprintf(stderr, "seq_reader.c warning: FASTQ is missing a quality line "
+                    "[read: '%s']\n", sequence->name->buff);
   }
   else if(string_buff_strlen(sequence->qual) !=
           string_buff_strlen(sequence->seq))
   {
-    fprintf(stderr, "Warning: FASTQ sequence and quality lines are not "
-                    "the same length (read name: '%s')\n",
+    fprintf(stderr, "seq_reader.c warning: FASTQ sequence and quality lines "
+                    "are not the same length [read: '%s']\n",
                     sequence->name->buff);
-    fprintf(stderr, "Sequence: '%s'\n", sequence->seq->buff);
-    fprintf(stderr, "Quality : '%s'\n", sequence->qual->buff);
+    //fprintf(stderr, "Sequence: '%s'\n", sequence->seq->buff);
+    //fprintf(stderr, "Quality : '%s'\n", sequence->qual->buff);
   }
   else
   {
@@ -332,58 +385,54 @@ char _read_fasta_entry(SequenceFile* file, Sequence* sequence)
 {
   // Read until we have a header line
   int c;
-  
-  do
-  {
-    c = gzgetc(file->gz_file);
-  } while(c != -1 && (c == '\n' || c == '\r'));
 
-  if(c == -1)
+  if(!file->read_line_start)
   {
-    return 0;
-  }
-  else if(c != '>')
-  {
-    fprintf(stderr, "seq_reader.c warning: FASTA header does not begin "
-                    "with '>' (read name: '%s')\n", sequence->name->buff);
+    do
+    {
+      c = gzgetc(file->gz_file);
+    } while(c != -1 && (c == '\n' || c == '\r'));
+
+    if(c == -1)
+    {
+      return 0;
+    }
+    else if(c != '>')
+    {
+      fprintf(stderr, "seq_reader.c warning: FASTA header does not begin "
+                      "with '>' [read name: '%s']\n", sequence->name->buff);
+    }
+
+    file->read_line_start = 0;
   }
 
   string_buff_gzreadline(sequence->name, file->gz_file);
   string_buff_chomp(sequence->name);
 
-  while(1)
+  // Check line doesn't begin with '>'
+  int first_char = gzgetc(file->gz_file);
+
+  while((first_char = gzgetc(file->gz_file)) != -1)
   {
-    // Check line doesn't begin with '>'
-    int first_char = gzgetc(file->gz_file);
-
-    if(first_char == -1)
+    if(first_char == '>')
     {
-      break;
-    }
-    else if(first_char == '>')
-    {
-      // Push char back onto buffer
-      gzungetc(first_char, file->gz_file);
-
       // Done
+      file->read_line_start = 1;
       break;
     }
-    else
+    else if(first_char != '\n' && first_char != '\r')
     {
       // Push char onto string
       string_buff_append_char(sequence->seq, first_char);
       string_buff_chomp(sequence->seq);
 
-      if(first_char != '\n' && first_char != '\r')
+      // Read the rest of the line
+      if(string_buff_gzreadline(sequence->seq, file->gz_file) == 0)
       {
-        // Read the rest of the line
-        if(string_buff_gzreadline(sequence->seq, file->gz_file) == 0)
-        {
-          break;
-        }
-
-        string_buff_chomp(sequence->seq);
+        break;
       }
+
+      string_buff_chomp(sequence->seq);
     }
   }
 
@@ -488,9 +537,7 @@ char _read_plain_entry(SequenceFile* file, Sequence* sequence)
 // Returns 0 if at end of file; 1 otherwise
 char seq_file_read(SequenceFile* file, Sequence* sequence)
 {
-  string_buff_reset(sequence->name);
-  string_buff_reset(sequence->seq);
-  string_buff_reset(sequence->qual);
+  seq_reset(sequence);
 
   if(file->gz_file != NULL && gzeof(file->gz_file))
   {
@@ -525,36 +572,49 @@ char seq_file_read(SequenceFile* file, Sequence* sequence)
   return success;
 }
 
-// Kmer reader
-SequenceKmerReader* seq_file_get_kmer_reader(SequenceFile* file, int kmer_size)
+
+//
+// Sequence Kmer Reader
+//
+SequenceKmerReader* seq_file_kmer_reader_open(const char* path,
+                                              const int kmer_size)
 {
+  SequenceFile* file = seq_file_open(path);
+
+  if(file == NULL)
+  {
+    return NULL;
+  }
+
   SequenceKmerReader* reader
     = (SequenceKmerReader*) malloc(sizeof(SequenceKmerReader));
 
   reader->file = file;
   reader->kmer_size = kmer_size;
   reader->offset = 0;
-  reader->read_line_start = 0;
 
-  switch(file->file_type)
+  if(file->file_type == SEQ_SAM ||
+     file->file_type == SEQ_BAM ||
+     file->file_type == SEQ_FASTQ)
   {
-    case SEQ_SAM:
-    case SEQ_BAM:
-    case SEQ_FASTQ:
-      reader->whole_entry = seq_init();
-    default:
-      break;
+    reader->whole_entry = seq_create();
+  }
+  else
+  {
+    reader->whole_entry = NULL;
   }
 
   return reader;
 }
 
-void _reset_sequence(Sequence* sequence)
+void seq_file_kmer_reader_close(SequenceKmerReader* reader)
 {
-  string_buff_reset(sequence->name);
-  string_buff_reset(sequence->seq);
-  string_buff_reset(sequence->qual);
-  sequence->offset = 0;
+  if(reader->whole_entry != NULL)
+  {
+    seq_free(reader->whole_entry);
+  }
+
+  free(reader);
 }
 
 void _shift_insert_char(STRING_BUFFER* str, char c)
@@ -570,7 +630,7 @@ char _read_fasta_entry_kmer(SequenceKmerReader* reader, Sequence* sequence)
   size_t kmer_size = reader->kmer_size;
   int c;
 
-  if(reader->read_line_start == 1)
+  if(reader->file->read_line_start == 1)
   {
     c = '>';
   }
@@ -580,7 +640,7 @@ char _read_fasta_entry_kmer(SequenceKmerReader* reader, Sequence* sequence)
 
     if(c == -1)
     {
-      _reset_sequence(sequence);
+      seq_reset(sequence);
       return 0;
     }
   }
@@ -598,14 +658,14 @@ char _read_fasta_entry_kmer(SequenceKmerReader* reader, Sequence* sequence)
     {
       fprintf(stderr, "seq_reader.c - read_fasta_entry_kmer(): expected "
                       "line to start '>'");
-      _reset_sequence(sequence);
+      seq_reset(sequence);
       return 0;
     }
 
-    _reset_sequence(sequence);
+    seq_reset(sequence);
 
     reader->offset = 0;
-    reader->read_line_start = 0;
+    reader->file->read_line_start = 0;
 
     // Read name
     string_buff_gzreadline(sequence->name, reader->file->gz_file);
@@ -622,7 +682,7 @@ char _read_fasta_entry_kmer(SequenceKmerReader* reader, Sequence* sequence)
     else if(c == '>')
     {
       // No sequence with name, but still success
-      reader->read_line_start = 1;
+      reader->file->read_line_start = 1;
       return 1;
     }
     else
@@ -654,7 +714,7 @@ char _read_plain_entry_kmer(SequenceKmerReader* reader, Sequence* sequence)
   
   if((c = gzgetc(reader->file->gz_file)) != -1)
   {
-    _reset_sequence(sequence);
+    seq_reset(sequence);
     return 0;
   }
 
@@ -668,7 +728,7 @@ char _read_plain_entry_kmer(SequenceKmerReader* reader, Sequence* sequence)
   else
   {
     // Read new
-    _reset_sequence(sequence);
+    seq_reset(sequence);
     reader->offset = 0;
 
     while(string_buff_strlen(sequence->seq) < reader->kmer_size)
@@ -678,7 +738,7 @@ char _read_plain_entry_kmer(SequenceKmerReader* reader, Sequence* sequence)
                             reader->kmer_size) == 0)
       {
         // No characters read
-        _reset_sequence(sequence);
+        seq_reset(sequence);
         return 0;
       }
 
@@ -706,7 +766,7 @@ char _read_whole_entry_kmer(SequenceKmerReader* reader, Sequence* sequence)
   while(reader->offset + reader->kmer_size >
         string_buff_strlen(reader->whole_entry->seq))
   {
-    _reset_sequence(reader->whole_entry);
+    seq_reset(reader->whole_entry);
 
     reader->offset = 0;
 
@@ -722,14 +782,14 @@ char _read_whole_entry_kmer(SequenceKmerReader* reader, Sequence* sequence)
 
     if(!read_new_entry)
     {
-      _reset_sequence(sequence);
+      seq_reset(sequence);
       return 0;
     }
   }
 
   if(read_new_entry)
   {
-    _reset_sequence(sequence);
+    seq_reset(sequence);
 
     // copy name
     string_buff_copy(sequence->name, 0, reader->whole_entry->name, 0,
@@ -782,7 +842,7 @@ char seq_file_read_kmer(SequenceKmerReader* reader, Sequence* sequence)
   else
   {
     fprintf(stderr, "seq_reader.c warning: "
-                      "tried to read from unknown filetype\n");
+                      "tried to read kmer from unknown filetype\n");
     return 0;
   }
 }
