@@ -1,19 +1,19 @@
 ifdef DEBUG
-	CFLAGS:=-DDEBUG=1 --debug
+	CFLAGS := -DDEBUG=1 --debug
 else
-	CFLAGS:=-O3
+	CFLAGS := -O3
 endif
 
-LIB_PATH=$(HOME)/c/libs/
+LIB_PATH=$(HOME)/c/libs
 
 STRING_BUF_PATH=$(LIB_PATH)/string_buffer
 SAMPATH=$(HOME)/bioinf/samtools-0.1.18
 
 # Check mac/linux
-UNAME := $(shell uname)
+UNAME:=$(shell uname)
 
 ifeq ($(UNAME), Darwin)
-	CFLAGS := $(FLAGS) -fnested-functions
+	CFLAGS := $(CFLAGS) -fnested-functions
 endif
 
 CFLAGS := $(CFLAGS) -Wall -I$(SAMPATH) -L$(SAMPATH) -I $(STRING_BUF_PATH)
