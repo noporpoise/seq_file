@@ -54,21 +54,22 @@ int main(int argc, char** argv)
   seq_file_close(file);
 
   // Printing kmers
-  int kmers[] = {1,10,50};
+  int num_of_kmers = 2;
+  int kmers[] = {1,20};
   SequenceKmerReader* reader;
 
-  for(i = 0; i < 3; i++)
+  for(i = 0; i < num_of_kmers; i++)
   {
     printf("kmer: %i\n", kmers[i]);
-    reader = seq_file_kmer_reader_open(file_path, kmers[i]);
+    reader = kmer_reader_open(file_path, kmers[i]);
 
-    for(j = 0; j < 10 && seq_file_read_kmer(reader, seq); j++)
+    for(j = 0; j < 10 && kmer_reader_read_kmer(reader, seq); j++)
     {
-      printf(" %i>%s[%i]\n%s\n%s\n", j, seq->name->buff, seq->offset,
-             seq->seq->buff, seq->qual->buff);
+      printf(" %i) %i:%i %s\n%s\n%s\n", j, (int)kmer_reader_entry_number(reader),
+             seq->offset, seq->name->buff, seq->seq->buff, seq->qual->buff);
     }
 
-    seq_file_kmer_reader_close(reader);
+    kmer_reader_close(reader);
   }
 
   seq_free(seq);
