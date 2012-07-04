@@ -1,14 +1,14 @@
-Library for reading multiple sequence file formats
+C Library for reading multiple bioinformatics sequence file formats
 
 https://github.com/noporpoise/seq_reader
 
 Isaac Turner
 turner.isaac@gmail.com
-23 June 2012, GPLv3
+4 July 2012, GPLv3
 
 == About ==
 
-The aim is to provide a library that allows programs to transparently read
+The aim is to provide a C library that allows programs to transparently read
 sequence data from multiple file formats, without having to worry about the
 format.  Pass a file to seq_file_open() and then read sequences using
 seq_next_read() without having to worry about what the file format is.  
