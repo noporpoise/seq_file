@@ -177,6 +177,20 @@ void seq_guess_filetype_from_path(const char *path, SeqFileType *file_type,
     }
   }
 
+  if(strcasecmp(".txt", path+path_len-4) == 0)
+  {
+    *zipped = 0;
+    *file_type = SEQ_PLAIN;
+    return;
+  }
+
+  if(strcasecmp(".txt.gz", path+path_len-7) == 0)
+  {
+    *zipped = 1;
+    *file_type = SEQ_PLAIN;
+    return;
+  }
+
   *file_type = SEQ_UNKNOWN;
 }
 
@@ -1356,7 +1370,14 @@ size_t _seq_file_write_seq_fastq(SeqFile *sf, const char *seq, size_t str_len)
 
 size_t _seq_file_write_seq_plain(SeqFile *sf, const char *seq)
 {
-  return seq_puts(sf, seq) + seq_puts(sf, "\n");
+  size_t num_bytes_printed = 0;
+
+  if(sf->write_state != WS_BEGIN)
+    num_bytes_printed += seq_puts(sf, "\n");
+
+  num_bytes_printed += seq_puts(sf, seq);
+
+  return num_bytes_printed;
 }
 
 size_t seq_file_write_seq(SeqFile *sf, const char *seq)

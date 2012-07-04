@@ -91,46 +91,64 @@ int main(int argc, char** argv)
   printf(" Out: %s [%s]\n", out_path, seq_file_get_type_str(out_file));
 
   // Start converting
-  unsigned long bytes_written = 0;
+  size_t bytes_written = 0;
   char c[2] = ".";
 
-  while(seq_next_read(in_file))
+  if(out_file_type == SEQ_PLAIN)
   {
-    bytes_written += seq_file_write_name(out_file, seq_get_read_name(in_file));
+    // Example reading in an entire at a time using seq_read_all_bases()
+    STRING_BUFFER *bases = string_buff_new();
 
-    unsigned long seq_length = 0;
-
-    while(seq_read_base(in_file, c))
+    while(seq_next_read(in_file))
     {
-      seq_length++;
-
-      if(!(bytes_written += seq_file_write_seq(out_file, c)))
+      while(seq_read_all_bases(in_file, bases))
       {
-        fprintf(stderr, "Couldn't write base to file\n");
-        exit(EXIT_FAILURE);
+        bytes_written += seq_file_write_seq(out_file, bases->buff);
       }
     }
-    
-    if(seq_has_quality_scores(out_file))
+  }
+  else
+  {
+    // Example reading in a char at a time using seq_read_base()
+    while(seq_next_read(in_file))
     {
-      unsigned long bytes_written_before_qual = bytes_written;
+      const char* read_name = seq_get_read_name(in_file);
+      bytes_written += seq_file_write_name(out_file, read_name);
 
-      while(seq_read_qual(in_file, c))
+      unsigned long seq_length = 0;
+
+      while(seq_read_base(in_file, c))
       {
-        if(!(bytes_written += seq_file_write_qual(out_file, c)))
+        seq_length++;
+
+        if(!(bytes_written += seq_file_write_seq(out_file, c)))
         {
-          fprintf(stderr, "Couldn't write quality score to file\n");
+          fprintf(stderr, "Couldn't write base to file\n");
           exit(EXIT_FAILURE);
         }
       }
-
-      if(bytes_written == bytes_written_before_qual)
+    
+      if(seq_has_quality_scores(out_file))
       {
-        // No quality score were read - fill in
-        unsigned long i;
-        *c = '?';
-        for(i = 0; i < seq_length; i++)
-          bytes_written += seq_file_write_qual(out_file, c);
+        size_t bytes_written_before_qual = bytes_written;
+
+        while(seq_read_qual(in_file, c))
+        {
+          if(!(bytes_written += seq_file_write_qual(out_file, c)))
+          {
+            fprintf(stderr, "Couldn't write quality score to file\n");
+            exit(EXIT_FAILURE);
+          }
+        }
+
+        if(bytes_written == bytes_written_before_qual)
+        {
+          // No quality score were read - fill in
+          unsigned long i;
+          *c = '?';
+          for(i = 0; i < seq_length; i++)
+            bytes_written += seq_file_write_qual(out_file, c);
+        }
       }
     }
   }
