@@ -16,19 +16,21 @@ ifeq ($(UNAME), Darwin)
 	CFLAGS := $(CFLAGS) -fnested-functions
 endif
 
-CFLAGS := $(CFLAGS) -Wall -I$(SAMPATH) -L$(SAMPATH) -I $(STRING_BUF_PATH)
+CFLAGS := $(CFLAGS) -Wall -Wextra
+CFLAGS := $(CFLAGS) -I$(SAMPATH) -L$(SAMPATH) -I $(STRING_BUF_PATH)
+
 LIB_FLAGS := -lbam -lm -lz
 
 all:
-	gcc -o seq_reader.o $(CFLAGS) -c seq_reader.c
+	gcc -o seq_file.o $(CFLAGS) -c seq_file.c
 	gcc -o seq_convert $(CFLAGS) $(LIB_FLAGS) \
-	seq_convert.c seq_reader.o $(STRING_BUF_PATH)/string_buffer.c
-	gcc -o seq_reader_test $(CFLAGS) $(LIB_FLAGS) \
-	seq_reader_test.c seq_reader.o $(STRING_BUF_PATH)/string_buffer.c
+	seq_convert.c seq_file.o $(STRING_BUF_PATH)/string_buffer.c
+	gcc -o seq_file_test $(CFLAGS) $(LIB_FLAGS) \
+	seq_file_test.c seq_file.o $(STRING_BUF_PATH)/string_buffer.c
 
 clean:
-	if test -e seq_reader.o; then rm seq_reader.o; fi
+	if test -e seq_file.o; then rm seq_file.o; fi
 	if test -e seq_convert; then rm seq_convert; fi
-	if test -e seq_reader_test; then rm seq_reader_test; fi
+	if test -e seq_file_test; then rm seq_file_test; fi
 	for file in $(wildcard *.dSYM); do rm -r $$file; done
 	for file in $(wildcard *.greg); do rm $$file; done

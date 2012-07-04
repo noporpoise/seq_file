@@ -43,3 +43,52 @@ $ make
 
 Please get in touch if you find bugs, have questions or can suggest features.  
 Isaac <turner.isaac@gmail.com>
+
+== Proposed direction ==
+
+SeqFile* seq_file_open(char* path);
+void seq_file_close(SeqFile *f);
+
+// Returns 1 on success 0 if no more to read
+char seq_next_read(SeqFile *f);
+
+// Get the name of the next read
+// Returns NULL if read has no name (i.e. input is SEQ_PLAIN)
+const char* seq_get_read_name(SeqFile *f);
+
+// Get this read index -- starts from 0
+unsigned long seq_get_read_index(SeqFile *f);
+
+// If seq_next_read() returned 1 and seq_read_base() is now returning 0,
+// seq_get_length() will now report the correct read length
+unsigned long seq_get_length(SeqFile *f);
+
+// Returns 1 on success, 0 otherwise
+char seq_read_base(SeqFile *f, char *c);
+
+// Returns 1 on success, 0 if no quality scores or run out of bases
+char seq_read_base_qual(SeqFile *f, char *c);
+
+// str must be at least k+1 bytes long
+// returns 1 on success, 0 otherwise
+char seq_read_k_bases(SeqFile *f, char* str, int k);
+char seq_read_k_bases_qual(SeqFile *f, char* str, int k);
+
+const char* seq_read_whole(SeqFile *f);
+const char* seq_read_whole_qual(SeqFile *f);
+
+// Guess a filetype from path
+void seq_file_guess_filetype_from_path(const char* path,
+                                       SequenceFileType* file_type,
+                                       char* zipped);
+
+// Get file type
+SequenceFileType seq_file_get_type(const SeqFile* file);
+const char* seq_file_get_type_str(const SeqFile* file);
+const char* seq_file_type_str(const SeqFileType file_type, const char zipped);
+
+// Get path
+const char* seq_get_path(const SequenceFile* file);
+
+// Get the number of bases read so far
+unsigned long seq_bases_read(const SequenceFile* file);
