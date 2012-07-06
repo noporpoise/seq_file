@@ -76,7 +76,7 @@ struct SeqFile
   char read_line_start;
 
   // name, index and bases-read/offset of current entry
-  STRING_BUFFER *entry_name;
+  StrBuf *entry_name;
   unsigned long entry_index;
   
   unsigned long entry_offset, entry_offset_qual;
@@ -85,7 +85,7 @@ struct SeqFile
   char entry_read, entry_read_qual;
 
   // Buffer for reading in bases in FASTQ files
-  STRING_BUFFER *bases_buff;
+  StrBuf *bases_buff;
 
   // total bases read/written - initially 0
   unsigned long total_bases_passed;
@@ -254,7 +254,7 @@ void _set_seq_filetype(SeqFile *file)
     // Reading FASTQ
     file->file_type = SEQ_FASTQ;
     file->read_line_start = 1;
-    file->bases_buff = string_buff_new();
+    file->bases_buff = strbuf_new();
   }
   else if(is_base_char(first_char))
   {
@@ -282,7 +282,7 @@ SeqFile* _create_default_seq_file(const char* file_path)
   sf->file_type = SEQ_UNKNOWN;
   sf->read_line_start = 0;
 
-  sf->entry_name = string_buff_new();
+  sf->entry_name = strbuf_new();
   sf->entry_index = 0;
 
   sf->entry_offset = 0;
@@ -328,7 +328,7 @@ SeqFile* seq_file_open_filetype(const char* file_path,
 
   if(file_type == SEQ_FASTQ)
   {
-    file->bases_buff = string_buff_new();
+    file->bases_buff = strbuf_new();
   }
 
   switch(file_type)
@@ -452,7 +452,7 @@ size_t seq_file_close(SeqFile* sf)
     fclose(sf->plain_file);
   }
 
-  string_buff_free(sf->entry_name);
+  strbuf_free(sf->entry_name);
 
   free(sf);
 
@@ -514,8 +514,8 @@ char _seq_next_read_fasta(SeqFile *sf)
   if(sf->read_line_start)
   {
     // Read name
-    string_buff_gzreadline(sf->entry_name, sf->gz_file);
-    string_buff_chomp(sf->entry_name);
+    strbuf_gzreadline(sf->entry_name, sf->gz_file);
+    strbuf_chomp(sf->entry_name);
 
     sf->read_line_start = 0;
     return 1;
@@ -542,8 +542,8 @@ char _seq_next_read_fasta(SeqFile *sf)
     while(c != '>');
 
     // Read name
-    string_buff_gzreadline(sf->entry_name, sf->gz_file);
-    string_buff_chomp(sf->entry_name);
+    strbuf_gzreadline(sf->entry_name, sf->gz_file);
+    strbuf_chomp(sf->entry_name);
 
     return 1;
   }
@@ -551,7 +551,7 @@ char _seq_next_read_fasta(SeqFile *sf)
 
 void _seq_read_fastq_sequence(SeqFile *sf)
 {
-  string_buff_reset(sf->bases_buff);
+  strbuf_reset(sf->bases_buff);
 
   int c;
 
@@ -559,9 +559,9 @@ void _seq_read_fastq_sequence(SeqFile *sf)
   {
     if(c != '\r' && c != '\n')
     {
-      string_buff_append_char(sf->bases_buff, c);
-      string_buff_gzreadline(sf->bases_buff, sf->gz_file);
-      string_buff_chomp(sf->bases_buff);
+      strbuf_append_char(sf->bases_buff, c);
+      strbuf_gzreadline(sf->bases_buff, sf->gz_file);
+      strbuf_chomp(sf->bases_buff);
     }
   }
 
@@ -576,8 +576,8 @@ char _seq_next_read_fastq(SeqFile *sf)
   if(sf->read_line_start)
   {
     // Read name
-    string_buff_gzreadline(sf->entry_name, sf->gz_file);
-    string_buff_chomp(sf->entry_name);
+    strbuf_gzreadline(sf->entry_name, sf->gz_file);
+    strbuf_chomp(sf->entry_name);
 
     // Read whole sequence
     _seq_read_fastq_sequence(sf);
@@ -590,7 +590,7 @@ char _seq_next_read_fastq(SeqFile *sf)
     int c;
 
     // Skip over remaining quality values
-    while(sf->entry_offset_qual < string_buff_strlen(sf->bases_buff))
+    while(sf->entry_offset_qual < strbuf_len(sf->bases_buff))
     {
       if((c = gzgetc(sf->gz_file)) == -1)
         return 0;
@@ -613,8 +613,8 @@ char _seq_next_read_fastq(SeqFile *sf)
     }
 
     // Read name
-    string_buff_gzreadline(sf->entry_name, sf->gz_file);
-    string_buff_chomp(sf->entry_name);
+    strbuf_gzreadline(sf->entry_name, sf->gz_file);
+    strbuf_chomp(sf->entry_name);
 
     // Read whole sequence
     _seq_read_fastq_sequence(sf);
@@ -629,7 +629,7 @@ char _seq_next_read_bam(SeqFile *sf)
     return 0;
 
   // Get name
-  string_buff_append_str(sf->entry_name, bam1_qname(sf->bam));
+  strbuf_append_str(sf->entry_name, bam1_qname(sf->bam));
 
   return 1;
 }
@@ -657,7 +657,7 @@ char _seq_next_read_plain(SeqFile *sf)
 // Returns 1 on success 0 if no more to read
 char seq_next_read(SeqFile *sf)
 {
-  string_buff_reset(sf->entry_name);
+  strbuf_reset(sf->entry_name);
 
   char success;
 
@@ -764,9 +764,9 @@ char _seq_read_base_fasta(SeqFile *sf, char *c)
 
 char _seq_read_base_fastq(SeqFile *sf, char *c)
 {
-  if(sf->entry_offset < string_buff_strlen(sf->bases_buff))
+  if(sf->entry_offset < strbuf_len(sf->bases_buff))
   {
-    *c = string_buff_get_char(sf->bases_buff, sf->entry_offset);
+    *c = strbuf_get_char(sf->bases_buff, sf->entry_offset);
     return 1;
   }
   else
@@ -870,7 +870,7 @@ char seq_read_base(SeqFile *sf, char *c)
 
 char _seq_read_qual_fastq(SeqFile *sf, char *c)
 {
-  if(sf->entry_offset_qual >= string_buff_strlen(sf->bases_buff))
+  if(sf->entry_offset_qual >= strbuf_len(sf->bases_buff))
     return 0;
 
   int next;
@@ -1008,7 +1008,7 @@ char seq_read_k_quals(SeqFile *sf, char* str, int k)
  Read the rest of a read
 */
 
-char _seq_read_all_bases_bam(SeqFile *sf, STRING_BUFFER *sbuf)
+char _seq_read_all_bases_bam(SeqFile *sf, StrBuf *sbuf)
 {
   int qlen = sf->bam->core.l_qseq;
 
@@ -1018,7 +1018,7 @@ char _seq_read_all_bases_bam(SeqFile *sf, STRING_BUFFER *sbuf)
   // Get reverse
   char is_reversed = sf->bam->core.flag & 16;
 
-  string_buff_ensure_capacity(sbuf, qlen - sf->entry_offset);
+  strbuf_ensure_capacity(sbuf, qlen - sf->entry_offset);
 
   uint8_t *seq = bam1_seq(sf->bam);
 
@@ -1029,13 +1029,13 @@ char _seq_read_all_bases_bam(SeqFile *sf, STRING_BUFFER *sbuf)
     int index = (is_reversed ? i : qlen - i - 1);
     int8_t b = bam1_seqi(seq, index);
     char c = bam_nt16_rev_table[is_reversed ? seq_comp_table[b] : b];
-    string_buff_append_char(sbuf, c);
+    strbuf_append_char(sbuf, c);
   }
 
   return 1;
 }
 
-char _seq_read_all_bases_fasta(SeqFile *sf, STRING_BUFFER *sbuf)
+char _seq_read_all_bases_fasta(SeqFile *sf, StrBuf *sbuf)
 {
   int c;
 
@@ -1043,9 +1043,9 @@ char _seq_read_all_bases_fasta(SeqFile *sf, STRING_BUFFER *sbuf)
   {
     if(c != '\r' && c != '\n')
     {
-      string_buff_append_char(sbuf, c);
-      string_buff_gzreadline(sbuf, sf->gz_file);
-      string_buff_chomp(sbuf);
+      strbuf_append_char(sbuf, c);
+      strbuf_gzreadline(sbuf, sf->gz_file);
+      strbuf_chomp(sbuf);
     }
   }
 
@@ -1055,31 +1055,31 @@ char _seq_read_all_bases_fasta(SeqFile *sf, STRING_BUFFER *sbuf)
   return 1;
 }
 
-char _seq_read_all_bases_fastq(SeqFile *sf, STRING_BUFFER *sbuf)
+char _seq_read_all_bases_fastq(SeqFile *sf, StrBuf *sbuf)
 {
   // Copy from buffer
   t_buf_pos len = sf->bases_buff->len - sf->entry_offset;
-  string_buff_copy(sbuf, 0, sf->bases_buff, sf->entry_offset, len);
+  strbuf_copy(sbuf, 0, sf->bases_buff, sf->entry_offset, len);
 
   return 1;
 }
 
-char _seq_read_all_bases_plain(SeqFile *sf, STRING_BUFFER *sbuf)
+char _seq_read_all_bases_plain(SeqFile *sf, StrBuf *sbuf)
 {
-  t_buf_pos len = string_buff_gzreadline(sbuf, sf->gz_file);
-  string_buff_chomp(sbuf);
+  t_buf_pos len = strbuf_gzreadline(sbuf, sf->gz_file);
+  strbuf_chomp(sbuf);
 
   return (len > 0);
 }
 
 // returns 1 on success, 0 otherwise
-char seq_read_all_bases(SeqFile *sf, STRING_BUFFER *sbuf)
+char seq_read_all_bases(SeqFile *sf, StrBuf *sbuf)
 {
   // Check if we have read anything in
   if(!sf->entry_read)
     return 0;
 
-  string_buff_reset(sbuf);
+  strbuf_reset(sbuf);
 
   char success;
 
@@ -1104,8 +1104,8 @@ char seq_read_all_bases(SeqFile *sf, STRING_BUFFER *sbuf)
       return 0;
   }
 
-  sf->entry_offset += string_buff_strlen(sbuf);
-  sf->total_bases_passed += string_buff_strlen(sbuf);
+  sf->entry_offset += strbuf_len(sbuf);
+  sf->total_bases_passed += strbuf_len(sbuf);
 
   // read has been exhausted
   sf->entry_read = 0;
@@ -1118,7 +1118,7 @@ char seq_read_all_bases(SeqFile *sf, STRING_BUFFER *sbuf)
  Read the rest of a read's quality scores
 */
 
-char _seq_read_all_quals_bam(SeqFile *sf, STRING_BUFFER *sbuf)
+char _seq_read_all_quals_bam(SeqFile *sf, StrBuf *sbuf)
 {
   int qlen = sf->bam->core.l_qseq;
 
@@ -1128,7 +1128,7 @@ char _seq_read_all_quals_bam(SeqFile *sf, STRING_BUFFER *sbuf)
   // Get reverse
   char is_reversed = sf->bam->core.flag & 16;
 
-  string_buff_ensure_capacity(sbuf, qlen - sf->entry_offset);
+  strbuf_ensure_capacity(sbuf, qlen - sf->entry_offset);
 
   uint8_t *seq = bam1_qual(sf->bam);
 
@@ -1137,19 +1137,19 @@ char _seq_read_all_quals_bam(SeqFile *sf, STRING_BUFFER *sbuf)
   for(i = sf->entry_offset; i < qlen; i++)
   {
     char c = 33 + seq[is_reversed ? i : qlen - i - 1];
-    string_buff_append_char(sbuf, c);
+    strbuf_append_char(sbuf, c);
   }
 
   return 1;
 }
 
-char _seq_read_all_quals_fastq(SeqFile *sf, STRING_BUFFER *sbuf)
+char _seq_read_all_quals_fastq(SeqFile *sf, StrBuf *sbuf)
 {
-  if(sf->entry_offset_qual >= string_buff_strlen(sf->bases_buff))
+  if(sf->entry_offset_qual >= strbuf_len(sf->bases_buff))
     return 0;
 
   // Expect the same number of quality scores as bases
-  t_buf_pos expected_len = string_buff_strlen(sf->bases_buff) -
+  t_buf_pos expected_len = strbuf_len(sf->bases_buff) -
                            sf->entry_offset_qual;
 
   int next = -1;
@@ -1159,7 +1159,7 @@ char _seq_read_all_quals_fastq(SeqFile *sf, STRING_BUFFER *sbuf)
   {
     if(next != '\r' && next != '\n')
     {
-      string_buff_append_char(sbuf, next);
+      strbuf_append_char(sbuf, next);
     }
   }
 
@@ -1173,13 +1173,13 @@ char _seq_read_all_quals_fastq(SeqFile *sf, STRING_BUFFER *sbuf)
 }
 
 // returns 1 on success, 0 otherwise
-char seq_read_all_quals(SeqFile *sf, STRING_BUFFER *sbuf)
+char seq_read_all_quals(SeqFile *sf, StrBuf *sbuf)
 {
   // Check if we have read anything in
   if(!sf->entry_read_qual)
     return 0;
 
-  string_buff_reset(sbuf);
+  strbuf_reset(sbuf);
 
   char success;
 
@@ -1199,7 +1199,7 @@ char seq_read_all_quals(SeqFile *sf, STRING_BUFFER *sbuf)
   }
 
   // Exhausted read quality scores
-  sf->entry_offset_qual += string_buff_strlen(sbuf);
+  sf->entry_offset_qual += strbuf_len(sbuf);
   sf->entry_read_qual = 0;
 
   return success;

@@ -97,7 +97,7 @@ int main(int argc, char** argv)
   if(out_file_type == SEQ_PLAIN)
   {
     // Example reading in an entire at a time using seq_read_all_bases()
-    STRING_BUFFER *bases = string_buff_new();
+    StrBuf *bases = strbuf_new();
 
     while(seq_next_read(in_file))
     {
