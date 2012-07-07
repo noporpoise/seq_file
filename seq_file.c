@@ -90,6 +90,8 @@ struct SeqFile
   // total bases read/written - initially 0
   unsigned long total_bases_passed;
 
+  unsigned long line_number;
+
   /* Writing preferences */
 
   // Output plain file for writing if not gzipping output
@@ -194,48 +196,52 @@ void seq_guess_filetype_from_path(const char *path, SeqFileType *file_type,
   *file_type = SEQ_UNKNOWN;
 }
 
-void _set_seq_filetype(SeqFile *file)
+void _set_seq_filetype(SeqFile *sf)
 {
-  size_t path_len = strlen(file->path);
+  size_t path_len = strlen(sf->path);
 
   if(path_len > 4)
   {
-    if(strcasecmp(".sam", file->path+path_len - 4) == 0)
+    if(strcasecmp(".sam", sf->path+path_len - 4) == 0)
     {
-      file->sam_file = samopen(file->path, "r", 0);
-      file->bam = bam_init1();
-      file->file_type = SEQ_SAM;
+      sf->sam_file = samopen(sf->path, "r", 0);
+      sf->bam = bam_init1();
+      sf->file_type = SEQ_SAM;
       return;
     }
-    else if(strcasecmp(".bam", file->path+path_len - 4) == 0)
+    else if(strcasecmp(".bam", sf->path+path_len - 4) == 0)
     {
-      file->sam_file = samopen(file->path, "rb", 0);
-      file->bam = bam_init1();
-      file->file_type = SEQ_BAM;
+      sf->sam_file = samopen(sf->path, "rb", 0);
+      sf->bam = bam_init1();
+      sf->file_type = SEQ_BAM;
       return;
     }
   }
 
   // Open file for the first time
-  if(strcmp(file->path, "-") == 0)
+  if(strcmp(sf->path, "-") == 0)
   {
-    file->gz_file = gzdopen(fileno(stdin), "r");
+    sf->gz_file = gzdopen(fileno(stdin), "r");
   }
   else
   {
-    file->gz_file = gzopen(file->path, "r");
+    sf->gz_file = gzopen(sf->path, "r");
   }
 
-  if(file->gz_file == NULL)
+  if(sf->gz_file == NULL)
   {
     return;
   }
 
   int first_char;
 
+  // Move sf->line_number from 0 to 1 on first character
+  // Then for each newline, line_number++
+
   do
   {
-    first_char = gzgetc(file->gz_file);
+    first_char = gzgetc(sf->gz_file);
+    sf->line_number++;
   } while (first_char != -1 && (first_char == '\n' || first_char == '\r'));
 
   if(first_char == -1)
@@ -246,20 +252,20 @@ void _set_seq_filetype(SeqFile *file)
   else if(first_char == '>')
   {
     // Reading FASTA
-    file->file_type = SEQ_FASTA;
-    file->read_line_start = 1;
+    sf->file_type = SEQ_FASTA;
+    sf->read_line_start = 1;
   }
   else if(first_char == '@')
   {
     // Reading FASTQ
-    file->file_type = SEQ_FASTQ;
-    file->read_line_start = 1;
-    file->bases_buff = strbuf_new();
+    sf->file_type = SEQ_FASTQ;
+    sf->read_line_start = 1;
+    sf->bases_buff = strbuf_new();
   }
   else if(is_base_char(first_char))
   {
-    file->file_type = SEQ_PLAIN;
-    file->read_line_start = first_char;
+    sf->file_type = SEQ_PLAIN;
+    sf->read_line_start = first_char;
   }
   else
   {
@@ -294,6 +300,7 @@ SeqFile* _create_default_seq_file(const char* file_path)
   sf->bases_buff = NULL;
 
   sf->total_bases_passed = 0;
+  sf->line_number = 0;
 
   // For writing
   sf->plain_file = NULL;
@@ -306,61 +313,61 @@ SeqFile* _create_default_seq_file(const char* file_path)
 
 SeqFile* seq_file_open(const char* file_path)
 {
-  SeqFile* file = _create_default_seq_file(file_path);
-  _set_seq_filetype(file);
+  SeqFile* sf = _create_default_seq_file(file_path);
+  _set_seq_filetype(sf);
 
-  if(file->file_type == SEQ_UNKNOWN)
+  if(sf->file_type == SEQ_UNKNOWN)
   {
-    free(file);
+    free(sf);
     return NULL;
   }
   else
   {
-    return file;
+    return sf;
   }
 }
 
 SeqFile* seq_file_open_filetype(const char* file_path,
                                 const SeqFileType file_type)
 {
-  SeqFile* file = _create_default_seq_file(file_path);
-  file->file_type = file_type;
+  SeqFile* sf = _create_default_seq_file(file_path);
+  sf->file_type = file_type;
 
   if(file_type == SEQ_FASTQ)
   {
-    file->bases_buff = strbuf_new();
+    sf->bases_buff = strbuf_new();
   }
 
   switch(file_type)
   {
     case SEQ_SAM:
-      file->sam_file = samopen(file->path, "r", 0);
-      file->bam = bam_init1();
+      sf->sam_file = samopen(sf->path, "r", 0);
+      sf->bam = bam_init1();
       break;
     case SEQ_BAM:
-      file->sam_file = samopen(file->path, "rb", 0);
-      file->bam = bam_init1();
+      sf->sam_file = samopen(sf->path, "rb", 0);
+      sf->bam = bam_init1();
       break;
     case SEQ_FASTA:
     case SEQ_FASTQ:
     case SEQ_PLAIN:
-      if(strcmp(file->path, "-") == 0)
+      if(strcmp(sf->path, "-") == 0)
       {
-        file->gz_file = gzdopen(fileno(stdin), "r");
+        sf->gz_file = gzdopen(fileno(stdin), "r");
       }
       else
       {
-        file->gz_file = gzopen(file->path, "r");
+        sf->gz_file = gzopen(sf->path, "r");
       }
       break;
     default:
       fprintf(stderr, "seq_reader.c warning: invalid SeqFileType in "
                       "function seq_file_open_filetype()\n");
-      free(file);
+      free(sf);
       return NULL;
   }
 
-  return file;
+  return sf;
 }
 
 // Open to write
@@ -429,6 +436,7 @@ size_t seq_file_close(SeqFile* sf)
   if(sf->write_state != WS_READ_ONLY)
   {
     num_bytes_printed = seq_puts(sf, "\n");
+    sf->line_number++;
   }
 
   if(sf->gz_file != NULL)
@@ -459,14 +467,14 @@ size_t seq_file_close(SeqFile* sf)
   return num_bytes_printed;
 }
 
-SeqFileType seq_file_get_type(const SeqFile* file)
+SeqFileType seq_file_get_type(const SeqFile* sf)
 {
-  return file->file_type;
+  return sf->file_type;
 }
 
-const char* seq_file_get_type_str(const SeqFile* file)
+const char* seq_file_get_type_str(const SeqFile* sf)
 {
-  return seq_file_types[file->file_type];
+  return seq_file_types[sf->file_type];
 }
 
 const char* seq_file_type_str(const SeqFileType file_type,
@@ -476,14 +484,19 @@ const char* seq_file_type_str(const SeqFileType file_type,
 }
 
 // Get a pointer to the file path
-const char* seq_get_path(const SeqFile* file)
+const char* seq_get_path(const SeqFile* sf)
 {
-  return file->path;
+  return sf->path;
 }
 
-unsigned long seq_num_bases_passed(const SeqFile *sf)
+unsigned long seq_total_bases_passed(const SeqFile *sf)
 {
   return sf->total_bases_passed;
+}
+
+unsigned long seq_curr_line_number(const SeqFile *sf)
+{
+  return sf->line_number;
 }
 
 char seq_has_quality_scores(const SeqFile *sf)
@@ -516,7 +529,7 @@ char _seq_next_read_fasta(SeqFile *sf)
     // Read name
     strbuf_gzreadline(sf->entry_name, sf->gz_file);
     strbuf_chomp(sf->entry_name);
-
+    sf->line_number++;
     sf->read_line_start = 0;
     return 1;
   }
@@ -532,9 +545,12 @@ char _seq_next_read_fasta(SeqFile *sf)
 
       if(c == -1)
         return 0;
+      else
+        sf->line_number++; // Must have read a new line
 
       // Read through end of line chars
-      while((c = gzgetc(sf->gz_file)) != -1 && (c == '\n' || c == '\r'));
+      while((c = gzgetc(sf->gz_file)) != -1 && (c == '\n' || c == '\r'))
+        sf->line_number++;
 
       if(c == -1)
         return 0;
@@ -544,6 +560,7 @@ char _seq_next_read_fasta(SeqFile *sf)
     // Read name
     strbuf_gzreadline(sf->entry_name, sf->gz_file);
     strbuf_chomp(sf->entry_name);
+    sf->line_number++;
 
     return 1;
   }
@@ -563,6 +580,8 @@ void _seq_read_fastq_sequence(SeqFile *sf)
       strbuf_gzreadline(sf->bases_buff, sf->gz_file);
       strbuf_chomp(sf->bases_buff);
     }
+
+    sf->line_number++;
   }
 
   if(c == -1)
@@ -578,6 +597,7 @@ char _seq_next_read_fastq(SeqFile *sf)
     // Read name
     strbuf_gzreadline(sf->entry_name, sf->gz_file);
     strbuf_chomp(sf->entry_name);
+    sf->line_number++;
 
     // Read whole sequence
     _seq_read_fastq_sequence(sf);
@@ -597,10 +617,13 @@ char _seq_next_read_fastq(SeqFile *sf)
 
       if(c != '\r' && c != '\n')
         sf->entry_offset_qual++;
+      else
+        sf->line_number++;
     }
 
     // Skip newlines
-    while((c = gzgetc(sf->gz_file)) != -1 && (c == '\n' || c == '\r'));
+    while((c = gzgetc(sf->gz_file)) != -1 && (c == '\n' || c == '\r'))
+      sf->line_number++;
 
     if(c == -1)
       return 0;
@@ -615,6 +638,7 @@ char _seq_next_read_fastq(SeqFile *sf)
     // Read name
     strbuf_gzreadline(sf->entry_name, sf->gz_file);
     strbuf_chomp(sf->entry_name);
+    sf->line_number++;
 
     // Read whole sequence
     _seq_read_fastq_sequence(sf);
@@ -649,6 +673,8 @@ char _seq_next_read_plain(SeqFile *sf)
 
     if(c == -1)
       return 0;
+    else
+      sf->line_number++;
 
     return 1;
   }
@@ -713,12 +739,12 @@ unsigned long seq_get_read_index(SeqFile *sf)
   return sf->entry_index;
 }
 
-unsigned long seq_get_base_offset(SeqFile *sf)
+unsigned long seq_get_bases_read(SeqFile *sf)
 {
   return sf->entry_offset;
 }
 
-unsigned long seq_get_qual_offset(SeqFile *sf)
+unsigned long seq_get_quals_read(SeqFile *sf)
 {
   return sf->entry_offset_qual;
 }
@@ -744,7 +770,8 @@ char _seq_read_base_fasta(SeqFile *sf, char *c)
 {
   int next;
   
-  while((next = gzgetc(sf->gz_file)) != -1 && (next == '\n' || next == '\r'));
+  while((next = gzgetc(sf->gz_file)) != -1 && (next == '\n' || next == '\r'))
+    sf->line_number++;
 
   if(next == -1)
   {
@@ -811,6 +838,7 @@ char _seq_read_base_plain(SeqFile *sf, char *c)
   }
   else if(next == '\r' || next == '\n')
   {
+    sf->line_number++;
     sf->read_line_start = 1;
     return 0;
   }
@@ -875,7 +903,8 @@ char _seq_read_qual_fastq(SeqFile *sf, char *c)
 
   int next;
 
-  while((next = gzgetc(sf->gz_file)) != -1 && (next == '\n' || next == '\r'));
+  while((next = gzgetc(sf->gz_file)) != -1 && (next == '\n' || next == '\r'))
+    sf->line_number++;
 
   if(next == -1)
   {
@@ -952,7 +981,7 @@ char seq_read_qual(SeqFile *sf, char *c)
  Read k bases / quality scores from a read
 */
 
-// str must be at least k+1 bytes long
+// str must be at least k+1 bytes long.  Null-terminates str at position k+1.
 // returns 1 on success, 0 otherwise
 char seq_read_k_bases(SeqFile *sf, char* str, int k)
 {
@@ -1047,6 +1076,8 @@ char _seq_read_all_bases_fasta(SeqFile *sf, StrBuf *sbuf)
       strbuf_gzreadline(sbuf, sf->gz_file);
       strbuf_chomp(sbuf);
     }
+
+    sf->line_number++;
   }
 
   if(c == '>')
@@ -1068,6 +1099,7 @@ char _seq_read_all_bases_plain(SeqFile *sf, StrBuf *sbuf)
 {
   t_buf_pos len = strbuf_gzreadline(sbuf, sf->gz_file);
   strbuf_chomp(sbuf);
+  sf->line_number++;
 
   return (len > 0);
 }
@@ -1161,6 +1193,8 @@ char _seq_read_all_quals_fastq(SeqFile *sf, StrBuf *sbuf)
     {
       strbuf_append_char(sbuf, next);
     }
+    else
+      sf->line_number++;
   }
 
   if(next == -1)
@@ -1222,6 +1256,7 @@ unsigned long _seq_file_write_name_fasta(SeqFile *sf, const char *name)
   else if(sf->write_state == WS_SEQ)
   {
     num_bytes_printed += seq_puts(sf, "\n>");
+    sf->line_number++;
   }
 
   num_bytes_printed += seq_puts(sf, name);
@@ -1247,6 +1282,7 @@ unsigned long _seq_file_write_name_fastq(SeqFile *sf, const char *name)
   else if(sf->write_state == WS_QUAL)
   {
     num_bytes_printed += seq_puts(sf, "\n@");
+    sf->line_number++;
   }
 
   num_bytes_printed += seq_puts(sf, name);
@@ -1294,6 +1330,7 @@ inline size_t _write_wrapped(SeqFile *sf, const char *str, size_t str_len)
   {
     sf->curr_line_length = 0;
     num_bytes_printed += seq_puts(sf, "\n");
+    sf->line_number++;
   }
   
   if(sf->curr_line_length + str_len <= sf->line_wrap)
@@ -1308,6 +1345,7 @@ inline size_t _write_wrapped(SeqFile *sf, const char *str, size_t str_len)
 
   num_bytes_printed += seq_write(sf, str, bytes_to_print);
   num_bytes_printed += seq_puts(sf, "\n");
+  sf->line_number++;
 
   size_t offset;
 
@@ -1317,7 +1355,10 @@ inline size_t _write_wrapped(SeqFile *sf, const char *str, size_t str_len)
     num_bytes_printed += seq_write(sf, str + offset, bytes_to_print);
 
     if(bytes_to_print < sf->line_wrap)
+    {
       num_bytes_printed += seq_puts(sf, "\n");
+      sf->line_number++;
+    }
   }
 
   sf->curr_line_length = bytes_to_print;
@@ -1340,6 +1381,7 @@ size_t _seq_file_write_seq_fasta(SeqFile *sf, const char *seq, size_t str_len)
   if(sf->write_state == WS_NAME)
   {
     num_bytes_printed += seq_puts(sf, "\n");
+    sf->line_number++;
   }
 
   num_bytes_printed += _write(sf, seq, str_len);
@@ -1361,6 +1403,7 @@ size_t _seq_file_write_seq_fastq(SeqFile *sf, const char *seq, size_t str_len)
   if(sf->write_state == WS_NAME)
   {
     num_bytes_printed += seq_puts(sf, "\n");
+    sf->line_number++;
   }
 
   num_bytes_printed += _write(sf, seq, str_len);
@@ -1373,7 +1416,10 @@ size_t _seq_file_write_seq_plain(SeqFile *sf, const char *seq)
   size_t num_bytes_printed = 0;
 
   if(sf->write_state != WS_BEGIN)
+  {
     num_bytes_printed += seq_puts(sf, "\n");
+    sf->line_number++;
+  }
 
   num_bytes_printed += seq_puts(sf, seq);
 
@@ -1442,6 +1488,7 @@ size_t seq_file_write_qual(SeqFile *sf, const char *qual)
   if(sf->write_state == WS_SEQ)
   {
     num_bytes_printed += seq_puts(sf, "\n+\n");
+    sf->line_number += 2;
   }
 
   num_bytes_printed += _write(sf, qual, str_len);

@@ -16,20 +16,20 @@ ifeq ($(UNAME), Darwin)
 	CFLAGS := $(CFLAGS) -fnested-functions
 endif
 
-CFLAGS := $(CFLAGS) -Wall -Wextra
-CFLAGS := $(CFLAGS) -I$(SAMPATH) -L$(SAMPATH) -I $(STRING_BUF_PATH)
+CFLAGS := $(CFLAGS) -Wall -Wextra -L$(SAMPATH) -I$(SAMPATH) \
+		  -I$(STRING_BUF_PATH) -L$(STRING_BUF_PATH)
 
-LIB_FLAGS := -lbam -lm -lz
+LIB_FLAGS := -lbam -lm -lz -lstrbuf
 
 all:
-	gcc -o seq_file.o $(CFLAGS) -c seq_file.c
-	gcc -o seq_convert $(CFLAGS) $(LIB_FLAGS) \
-	seq_convert.c seq_file.o $(STRING_BUF_PATH)/string_buffer.c
-	gcc -o seq_file_test $(CFLAGS) $(LIB_FLAGS) \
-	seq_file_test.c seq_file.o $(STRING_BUF_PATH)/string_buffer.c
+	gcc  $(CFLAGS) -o seq_file.o -c seq_file.c
+	ar -csru libseqfile.a seq_file.o
+	gcc -o seq_convert $(CFLAGS) $(LIB_FLAGS) seq_convert.c seq_file.o
+	gcc -o seq_file_test $(CFLAGS) $(LIB_FLAGS) seq_file_test.c seq_file.o
 
 clean:
 	if test -e seq_file.o; then rm seq_file.o; fi
+	if test -e libseqfile.a; then rm libseqfile.a; fi
 	if test -e seq_convert; then rm seq_convert; fi
 	if test -e seq_file_test; then rm seq_file_test; fi
 	for file in $(wildcard *.dSYM); do rm -r $$file; done

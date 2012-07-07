@@ -53,7 +53,10 @@ const char* seq_file_type_str(const SeqFileType file_type, const char zipped);
 const char* seq_get_path(const SeqFile *sf);
 
 // Get the number of bases read/written so far
-unsigned long seq_num_bases_passed(const SeqFile *sf);
+unsigned long seq_total_bases_passed(const SeqFile *sf);
+
+// Get current line number
+unsigned long seq_curr_line_number(const SeqFile *sf);
 
 // Returns 1 if file has quality scores, 0 otherwise
 // Note: quality scores may still all be set to 'null' e.g. ??? or ### etc.
@@ -69,9 +72,9 @@ const char* seq_get_read_name(SeqFile *sf);
 unsigned long seq_get_read_index(SeqFile *sf);
 
 // Get the distance into this read that we have read
-unsigned long seq_get_base_offset(SeqFile *sf);
+unsigned long seq_get_bases_read(SeqFile *sf);
 // Get the distance into this read's quality scores that we have read
-unsigned long seq_get_qual_offset(SeqFile *sf);
+unsigned long seq_get_quals_read(SeqFile *sf);
 
 // If seq_next_read() returned 1 and seq_read_base() is now returning 0,
 // seq_get_length() will now report the correct read length
