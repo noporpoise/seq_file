@@ -47,10 +47,16 @@ void seq_guess_filetype_from_path(const char* path,
 // Various methods for getting file type
 SeqFileType seq_file_get_type(const SeqFile *sf);
 const char* seq_file_get_type_str(const SeqFile  *sf);
-const char* seq_file_type_str(const SeqFileType file_type, const char zipped);
+const char* seq_file_type_str(SeqFileType file_type, char zipped);
 
 // Get path
 const char* seq_get_path(const SeqFile *sf);
+
+// Set/get FASTQ ASCII offset
+// Quality scores are returned in ASCII, this value is required when reading
+// from a SAM/BAM file, as they store quality scores without an offset
+void seq_set_fastq_ascii_offset(SeqFile *sf, char fastq_ascii_offset);
+char seq_get_fastq_ascii_offset(const SeqFile *sf);
 
 // Get the number of bases read/written so far
 unsigned long seq_total_bases_passed(const SeqFile *sf);
@@ -100,8 +106,8 @@ char seq_read_all_quals(SeqFile *sf, StrBuf *sbuf);
 // Write to a file.  Any of name, seq, quals may be NULL
 // Returns the number of bytes written or 0 on failure
 
-SeqFile* seq_file_open_write(const char* file_path, const SeqFileType file_type,
-                             const char gzip, const unsigned long line_wrap);
+SeqFile* seq_file_open_write(const char* file_path, SeqFileType file_type,
+                             char gzip, unsigned long line_wrap);
 
 // Returns 1 if open for writing, 0 otherwise
 char seq_is_open_for_write(const SeqFile *sf);

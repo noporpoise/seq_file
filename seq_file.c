@@ -70,6 +70,8 @@ struct SeqFile
   // For reading sam/bams
   bam1_t *bam;
 
+  char fastq_ascii_offset; // defaults to 33
+
   enum SeqFileType file_type;
 
   // have we seen a '>' at the start of a line in a fasta file?
@@ -285,6 +287,8 @@ SeqFile* _create_default_seq_file(const char* file_path)
 
   sf->bam = NULL;
 
+  sf->fastq_ascii_offset = 33;
+
   sf->file_type = SEQ_UNKNOWN;
   sf->read_line_start = 0;
 
@@ -328,7 +332,7 @@ SeqFile* seq_file_open(const char* file_path)
 }
 
 SeqFile* seq_file_open_filetype(const char* file_path,
-                                const SeqFileType file_type)
+                                SeqFileType file_type)
 {
   SeqFile* sf = _create_default_seq_file(file_path);
   sf->file_type = file_type;
@@ -374,8 +378,8 @@ SeqFile* seq_file_open_filetype(const char* file_path,
 // file_type must be FASTA, FASTQ
 // set gzip to != 0 to turn on gzipping output
 // if line_wrap is != 0, sequence lines are wrapped
-SeqFile* seq_file_open_write(const char* file_path, const SeqFileType file_type,
-                             const char gzip, unsigned long line_wrap)
+SeqFile* seq_file_open_write(const char* file_path, SeqFileType file_type,
+                             char gzip, unsigned long line_wrap)
 {
   if(file_type == SEQ_SAM || file_type == SEQ_BAM)
   {
@@ -477,8 +481,8 @@ const char* seq_file_get_type_str(const SeqFile* sf)
   return seq_file_types[sf->file_type];
 }
 
-const char* seq_file_type_str(const SeqFileType file_type,
-                              const char zipped)
+const char* seq_file_type_str(SeqFileType file_type,
+                              char zipped)
 {
   return zipped ? seq_file_types_zipped[file_type] : seq_file_types[file_type];
 }
@@ -487,6 +491,18 @@ const char* seq_file_type_str(const SeqFileType file_type,
 const char* seq_get_path(const SeqFile* sf)
 {
   return sf->path;
+}
+
+// Set FASTQ ASCII offset (also applies to SAM/BAM)
+void seq_set_fastq_ascii_offset(SeqFile *sf, char fastq_ascii_offset)
+{
+  sf->fastq_ascii_offset = fastq_ascii_offset;
+}
+
+// Get FASTQ ASCII offset (also applies to SAM/BAM)
+char seq_get_fastq_ascii_offset(const SeqFile *sf)
+{
+  return sf->fastq_ascii_offset;
 }
 
 unsigned long seq_total_bases_passed(const SeqFile *sf)
@@ -933,7 +949,7 @@ char _seq_read_qual_bam(SeqFile *sf, char *c)
   else
     index = sf->entry_offset_qual;
 
-  *c = 33 + seq[index];
+  *c = fastq_ascii_offset + seq[index];
 
   return 1;
 }
@@ -1168,7 +1184,7 @@ char _seq_read_all_quals_bam(SeqFile *sf, StrBuf *sbuf)
   int i;
   for(i = sf->entry_offset; i < qlen; i++)
   {
-    char c = 33 + seq[is_reversed ? i : qlen - i - 1];
+    char c = fastq_ascii_offset + seq[is_reversed ? i : qlen - i - 1];
     strbuf_append_char(sbuf, c);
   }
 
