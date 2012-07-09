@@ -949,7 +949,7 @@ char _seq_read_qual_bam(SeqFile *sf, char *c)
   else
     index = sf->entry_offset_qual;
 
-  *c = fastq_ascii_offset + seq[index];
+  *c = sf->fastq_ascii_offset + seq[index];
 
   return 1;
 }
@@ -1184,7 +1184,7 @@ char _seq_read_all_quals_bam(SeqFile *sf, StrBuf *sbuf)
   int i;
   for(i = sf->entry_offset; i < qlen; i++)
   {
-    char c = fastq_ascii_offset + seq[is_reversed ? i : qlen - i - 1];
+    char c = sf->fastq_ascii_offset + seq[is_reversed ? i : qlen - i - 1];
     strbuf_append_char(sbuf, c);
   }
 
