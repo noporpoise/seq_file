@@ -1005,22 +1005,19 @@ char seq_read_k_bases(SeqFile *sf, char* str, int k)
   if(!sf->entry_read)
     return 0;
 
-  // read will have been exhausted once this method returns
-  sf->entry_read = 0;
-
   int i;
 
   for(i = 0; i < k; i++)
   {
     if(!seq_read_base(sf, str+i))
     {
+      sf->entry_read = 0;
       str[0] = '\0';
       return 0;
     }
   }
 
   str[k] = '\0';
-
   return 1;
 }
 
@@ -1030,15 +1027,13 @@ char seq_read_k_quals(SeqFile *sf, char* str, int k)
   if(!sf->entry_read_qual)
     return 0;
 
-  // read will have been exhausted once this method returns
-  sf->entry_read_qual = 0;
-
   int i;
 
   for(i = 0; i < k; i++)
   {
     if(!seq_read_qual(sf, str+i))
     {
+      sf->entry_read_qual = 0;
       str[0] = '\0';
       return 0;
     }

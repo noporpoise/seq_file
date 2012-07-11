@@ -103,8 +103,8 @@ char seq_read_k_bases(SeqFile *sf, char* str, int k);
 char seq_read_k_quals(SeqFile *sf, char* str, int k);
 
 // returns 1 on success, 0 otherwise
-char seq_read_all_bases(SeqFile *sf, STRING_BUFFER *sbuf);
-char seq_read_all_quals(SeqFile *sf, STRING_BUFFER *sbuf);
+char seq_read_all_bases(SeqFile *sf, StrBuf *sbuf);
+char seq_read_all_quals(SeqFile *sf, StrBuf *sbuf);
 
 // Write to a file.  Any of name, seq, quals may be NULL
 // Returns the number of bytes written or 0 on failure
