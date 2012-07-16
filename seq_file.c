@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h> // tolower
 
 #include "seq_file.h"
 #include "sam.h"
@@ -111,111 +112,113 @@ struct SeqFile
 // Sequence File reader
 //
 
+void _str_to_lower(char *str)
+{
+  for(; *str != '\0'; str++)
+    *str = tolower(*str);
+}
+
+char _contains_extension(const char *path, const char *ext, const size_t len)
+{
+  const char *tmp;
+
+  for(tmp = path; (tmp = strstr(tmp, ext)) != NULL; tmp++)
+  {
+    if(*(tmp+len) == '\0' || *(tmp+len) == '.' || *(tmp+len) == '_')
+    {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
 void seq_guess_filetype_from_path(const char *path, SeqFileType *file_type,
                                   char *zipped)
 {
-  size_t path_len = strlen(path);
+  #define ARRLEN 18
 
-  #define NUM_FA 2
-  #define NUM_GZ 5
+  const char* exts[ARRLEN] = {".fa",".fasta",
+                              ".fq",".fastq",
+                              ".faz",".fagz",".fa.gz",".fa.gzip",".fasta.gzip",
+                              ".fqz",".fqgz",".fq.gz",".fq.gzip",".fastq.gzip",
+                              ".txt",".txtgz",".txt.gz",".txt.gzip"};
 
-  const char* fa[NUM_FA] = {".fa",".fasta"};
-  const char* fq[NUM_FA] = {".fq",".fastq"};
-  const char* fagz[NUM_GZ] = {".faz",".fagz",".fa.gz",".fa.gzip",".fasta.gzip"};
-  const char* fqgz[NUM_GZ] = {".fqz",".fqgz",".fq.gz",".fq.gzip",".fastq.gzip"};
+  const SeqFileType types[ARRLEN]
+    = {SEQ_FASTA, SEQ_FASTA,
+       SEQ_FASTQ, SEQ_FASTQ,
+       SEQ_FASTA, SEQ_FASTA, SEQ_FASTA, SEQ_FASTA, SEQ_FASTA,
+       SEQ_FASTQ, SEQ_FASTQ, SEQ_FASTQ, SEQ_FASTQ, SEQ_FASTQ,
+       SEQ_PLAIN, SEQ_PLAIN, SEQ_PLAIN, SEQ_PLAIN};
 
-  if(strcasecmp(".sam", path+path_len - 4) == 0)
-  {
-    *file_type = SEQ_SAM;
-    return;
-  }
-  else if(strcasecmp(".bam", path+path_len - 4) == 0)
-  {
-    *file_type = SEQ_BAM;
-    return;
-  }
-  
+  const char zips[ARRLEN] = {0, 0,
+                             0, 0,
+                             1, 1, 1, 1, 1,
+                             1, 1, 1, 1, 1,
+                             0, 1, 1, 1};
+
   int i;
+  size_t strlens[ARRLEN];
 
-  // FASTA
-  for(i = 0; i < NUM_FA; i++)
-  {
-    if(strcasecmp(fa[i], path+path_len-strlen(fa[i])) == 0)
-    {
-      *zipped = 0;
-      *file_type = SEQ_FASTA;
-      return;
-    }
-  }
-
-  // FASTA ZIPPED
-  for(i = 0; i < NUM_GZ; i++)
-  {
-    if(strcasecmp(fagz[i], path+path_len-strlen(fagz[i])) == 0)
-    {
-      *zipped = 1;
-      *file_type = SEQ_FASTA;
-      return;
-    }
-  }
-  
-  // FASTA
-  for(i = 0; i < NUM_FA; i++)
-  {
-    if(strcasecmp(fq[i], path+path_len-strlen(fq[i])) == 0)
-    {
-      *zipped = 0;
-      *file_type = SEQ_FASTQ;
-      return;
-    }
-  }
-
-  // FASTA ZIPPED
-  for(i = 0; i < NUM_GZ; i++)
-  {
-    if(strcasecmp(fqgz[i], path+path_len-strlen(fqgz[i])) == 0)
-    {
-      *zipped = 1;
-      *file_type = SEQ_FASTQ;
-      return;
-    }
-  }
-
-  if(strcasecmp(".txt", path+path_len-4) == 0)
-  {
-    *zipped = 0;
-    *file_type = SEQ_PLAIN;
-    return;
-  }
-
-  if(strcasecmp(".txt.gz", path+path_len-7) == 0)
-  {
-    *zipped = 1;
-    *file_type = SEQ_PLAIN;
-    return;
-  }
+  for(i = 0; i < ARRLEN; i++)
+    strlens[i] = strlen(exts[i]);
 
   *file_type = SEQ_UNKNOWN;
+
+  size_t path_len = strlen(path);
+
+  char* strcpy = strdup(path);
+  _str_to_lower(strcpy);
+
+  for(i = 0; i < ARRLEN; i++)
+  {
+    if(strcasecmp(path + path_len - strlens[i], exts[i]) == 0)
+    {
+      *file_type = types[i];
+      *zipped = zips[i];
+      free(strcpy);
+      return;
+    }
+  }
+
+  for(i = 0; i < ARRLEN; i++)
+  {
+    if(_contains_extension(path, exts[i], strlens[i]))
+    {
+      *file_type = types[i];
+      *zipped = zips[i];
+      free(strcpy);
+      return;
+    }
+  }
 }
 
+// Determines file type and opens necessary streams + mallocs memory
 void _set_seq_filetype(SeqFile *sf)
 {
   size_t path_len = strlen(sf->path);
 
   if(path_len > 4)
   {
-    if(strcasecmp(".sam", sf->path+path_len - 4) == 0)
+    char* path_cpy = strdup(sf->path);
+    _str_to_lower(path_cpy);
+
+    if(_contains_extension(path_cpy, ".sam", 4))
     {
       sf->sam_file = samopen(sf->path, "r", 0);
-      sf->bam = bam_init1();
       sf->file_type = SEQ_SAM;
-      return;
     }
-    else if(strcasecmp(".bam", sf->path+path_len - 4) == 0)
+    else if(_contains_extension(path_cpy, ".bam", 4))
     {
       sf->sam_file = samopen(sf->path, "rb", 0);
-      sf->bam = bam_init1();
       sf->file_type = SEQ_BAM;
+    }
+
+    free(path_cpy);
+
+    if(sf->file_type != SEQ_UNKNOWN)
+    {
+      sf->bam = bam_init1();
       return;
     }
   }
@@ -603,6 +606,12 @@ void _seq_read_fastq_sequence(SeqFile *sf)
   if(c == -1)
   {
     fprintf(stderr, "seq_file.c: missing + in FASTQ [file: %s]\n", sf->path);
+  }
+
+  // Read to end of separator line
+  if(c != '\r' && c != '\n')
+  {
+    strbuf_gzskip_line(sf->gz_file);
   }
 }
 

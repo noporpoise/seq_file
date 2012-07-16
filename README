@@ -42,6 +42,14 @@ $ make
 Please get in touch if you find bugs, have questions or can suggest features.  
 Isaac <turner.isaac@gmail.com>
 
+To run some basic test:
+
+$ for f in `ls test`; do echo test/$f >&2; ./seq_file_test test/$f; done > tests.out
+
+TODO:
+seq_file - Retrieve mate pair data etc from a sam/bam
+seq_convert - Add pair-end awareness: bam to 2 fastq files
+
 == Functions ==
 
 // Open for reading
