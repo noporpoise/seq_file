@@ -22,10 +22,10 @@ CFLAGS := $(CFLAGS) -Wall -Wextra -L$(SAMPATH) -I$(SAMPATH) \
 LIB_FLAGS := -lbam -lm -lz -lstrbuf
 
 all:
-	gcc  $(CFLAGS) -o seq_file.o -c seq_file.c
+	gcc $(CFLAGS) -o seq_file.o -c seq_file.c
 	ar -csru libseqfile.a seq_file.o
-	gcc -o seq_convert $(CFLAGS) $(LIB_FLAGS) seq_convert.c seq_file.o
-	gcc -o seq_file_test $(CFLAGS) $(LIB_FLAGS) seq_file_test.c seq_file.o
+	gcc -o seq_convert $(CFLAGS) seq_convert.c seq_file.o $(LIB_FLAGS)
+	gcc -o seq_file_test $(CFLAGS) seq_file_test.c seq_file.o $(LIB_FLAGS)
 
 clean:
 	if test -e seq_file.o; then rm seq_file.o; fi
