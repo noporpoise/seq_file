@@ -61,6 +61,9 @@ char seq_get_fastq_ascii_offset(const SeqFile *sf);
 // Get the number of bases read/written so far
 unsigned long seq_total_bases_passed(const SeqFile *sf);
 
+// Get the total bases skipped (not read through API) in file so far
+unsigned long seq_total_bases_skipped(const SeqFile *sf);
+
 // Get current line number
 unsigned long seq_curr_line_number(const SeqFile *sf);
 

@@ -52,7 +52,7 @@ void test_read_all_bases(char *file_path)
 
   if(sf == NULL)
   {
-    fprintf(stderr, "test_read_names: couldn't open file %s\n", file_path);
+    fprintf(stderr, "test_read_all_bases: couldn't open file %s\n", file_path);
     return;
   }
 
@@ -83,6 +83,9 @@ void test_read_names(char *file_path)
   {
     printf("read: %s\n", seq_get_read_name(sf));
   }
+
+  printf("%lu bases read\n", seq_total_bases_passed(sf));
+  printf("%lu bases skipped\n", seq_total_bases_skipped(sf));
 }
 
 void test_get_type(char* file_path)
@@ -112,11 +115,11 @@ int main(int argc, char** argv)
   printf(" Filepath: %s\n", file_path);
 
   // Test get type
-  test_get_type(file_path);
+  //test_get_type(file_path);
 
   test_read_names(file_path);
   
-  test_read_all_bases(file_path);
+  //test_read_all_bases(file_path);
 
   return EXIT_SUCCESS;
 }

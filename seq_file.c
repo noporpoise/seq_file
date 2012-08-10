@@ -90,8 +90,10 @@ struct SeqFile
   // Buffer for reading in bases in FASTQ files
   StrBuf *bases_buff;
 
-  // total bases read/written - initially 0
+  // Total bases read/written - initially 0
   unsigned long total_bases_passed;
+  // Total bases skipped (not read through API) in file so far
+  unsigned long total_bases_skipped;
 
   unsigned long line_number;
 
@@ -307,6 +309,8 @@ SeqFile* _create_default_seq_file(const char* file_path)
   sf->bases_buff = NULL;
 
   sf->total_bases_passed = 0;
+  sf->total_bases_skipped = 0;
+
   sf->line_number = 0;
 
   // For writing
@@ -508,9 +512,16 @@ char seq_get_fastq_ascii_offset(const SeqFile *sf)
   return sf->fastq_ascii_offset;
 }
 
+// Get the number of bases read/written so far
 unsigned long seq_total_bases_passed(const SeqFile *sf)
 {
   return sf->total_bases_passed;
+}
+
+// Get the total bases skipped (not read through API) in file so far
+unsigned long seq_total_bases_skipped(const SeqFile *sf)
+{
+  return sf->total_bases_skipped;
 }
 
 unsigned long seq_curr_line_number(const SeqFile *sf)
@@ -560,7 +571,10 @@ char _seq_next_read_fasta(SeqFile *sf)
     do
     {
       // Read until the end of the line
-      while((c = gzgetc(sf->gz_file)) != -1 && c != '\n' && c != '\r');
+      while((c = gzgetc(sf->gz_file)) != -1 && c != '\n' && c != '\r')
+      {
+        sf->total_bases_skipped++;
+      }
 
       if(c == -1)
         return 0;
@@ -569,10 +583,18 @@ char _seq_next_read_fasta(SeqFile *sf)
 
       // Read through end of line chars
       while((c = gzgetc(sf->gz_file)) != -1 && (c == '\n' || c == '\r'))
+      {
         sf->line_number++;
+      }
 
       if(c == -1)
+      {
         return 0;
+      }
+      else if(c != '>')
+      {
+        sf->total_bases_skipped++;
+      }
     }
     while(c != '>');
 
@@ -634,6 +656,9 @@ char _seq_next_read_fastq(SeqFile *sf)
   {
     int c;
 
+    // Count bases not read in
+    sf->total_bases_skipped += (strbuf_len(sf->bases_buff) - sf->entry_offset);
+
     // Skip over remaining quality values
     while(sf->entry_offset_qual < strbuf_len(sf->bases_buff))
     {
@@ -674,6 +699,12 @@ char _seq_next_read_fastq(SeqFile *sf)
 
 char _seq_next_read_bam(SeqFile *sf)
 {
+  if(sf->entry_read)
+  {
+    // Count skipped bases
+    sf->total_bases_skipped += sf->bam->core.l_qseq - sf->entry_offset;
+  }
+
   if(samread(sf->sam_file, sf->bam) < 0)
     return 0;
 
@@ -694,7 +725,10 @@ char _seq_next_read_plain(SeqFile *sf)
   {
     int c;
 
-    while((c = gzgetc(sf->gz_file)) != -1 && c != '\r' && c != '\n');
+    while((c = gzgetc(sf->gz_file)) != -1 && c != '\r' && c != '\n')
+    {
+      sf->total_bases_skipped++;
+    }
 
     if(c == -1)
       return 0;
@@ -837,7 +871,7 @@ char _seq_read_base_bam(SeqFile *sf, char *c)
     return 0;
 
   uint8_t *seq = bam1_seq(sf->bam);
-  
+
   if(is_reversed)
   {
     int index = query_len - sf->entry_offset - 1;
@@ -1474,6 +1508,7 @@ size_t seq_file_write_seq(SeqFile *sf, const char *seq)
   }
 
   sf->total_bases_passed += str_len;
+
   sf->write_state = WS_SEQ;
 
   return num_bytes_printed;

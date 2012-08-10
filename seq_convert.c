@@ -156,6 +156,7 @@ int main(int argc, char** argv)
   seq_file_close(in_file);
   bytes_written += seq_file_close(out_file);
 
+  printf("%lu bases read\n", seq_total_bases_passed(in_file));
   printf("%lu bytes written\n", bytes_written);
   printf("Done. \n");
 
