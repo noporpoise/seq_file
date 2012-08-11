@@ -463,7 +463,7 @@ size_t seq_file_close(SeqFile* sf)
 
   if(sf->bases_buff != NULL)
   {
-    free(sf->bases_buff);
+    strbuf_free(sf->bases_buff);
   }
 
   if(sf->plain_file != NULL)
