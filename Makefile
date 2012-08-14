@@ -6,8 +6,13 @@ endif
 
 LIB_PATH=$(HOME)/c/libs
 
-STRING_BUF_PATH=$(LIB_PATH)/string_buffer
-SAMPATH=$(HOME)/bioinf/samtools-0.1.18
+ifndef $STRING_BUF_PATH
+	STRING_BUF_PATH=$(LIB_PATH)/string_buffer
+endif
+
+ifndef $SAMPATH
+	SAMPATH=$(HOME)/bioinf/samtools-0.1.18
+endif
 
 # Check mac/linux
 UNAME:=$(shell uname)
