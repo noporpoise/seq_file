@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h> // tolower
+#include <zlib.h>
 
 #include "seq_file.h"
 #include "sam.h"
@@ -36,15 +37,15 @@
 
 // Write output MACROs
 // wrapper for fputs/gzputs
-#define seq_puts(f,str) (unsigned long) \
-((f)->plain_file != NULL ? fputs((str), (f)->plain_file) \
-                         : gzputs((f)->gz_file, (str)))
+#define seq_puts(f,str) (size_t) \
+((f)->plain_file != NULL ? (size_t)fputs((str), (f)->plain_file) \
+                         : (size_t)gzputs((f)->gz_file, (str)))
 
 // wrapper for fwrite/gzwrite
-#define seq_write(f,str,len) \
+#define seq_write(f,str,len) (size_t) \
 ((f)->plain_file != NULL \
-  ? (unsigned long)fwrite((str), sizeof(char), (len), (f)->plain_file) \
-  : (unsigned long)gzwrite((f)->gz_file, (str), (len)))
+  ? (size_t)fwrite((str), sizeof(char), (size_t)(len), (f)->plain_file) \
+  : (size_t)gzwrite((f)->gz_file, (str), (unsigned int)(len)))
 
 const char* seq_file_types[6]
   = {"Unknown", "FASTA", "FASTQ", "Plain", "SAM", "BAM"};
@@ -117,7 +118,7 @@ struct SeqFile
 void _str_to_lower(char *str)
 {
   for(; *str != '\0'; str++)
-    *str = tolower(*str);
+    *str = (char)tolower(*str);
 }
 
 char _contains_extension(const char *path, const char *ext, const size_t len)
@@ -272,7 +273,7 @@ void _set_seq_filetype(SeqFile *sf)
   else if(is_base_char(first_char))
   {
     sf->file_type = SEQ_PLAIN;
-    sf->read_line_start = first_char;
+    sf->read_line_start = (char)first_char;
   }
   else
   {
@@ -617,7 +618,7 @@ void _seq_read_fastq_sequence(SeqFile *sf)
   {
     if(c != '\r' && c != '\n')
     {
-      strbuf_append_char(sf->bases_buff, c);
+      strbuf_append_char(sf->bases_buff, (char)c);
       strbuf_gzreadline(sf->bases_buff, sf->gz_file);
       strbuf_chomp(sf->bases_buff);
     }
@@ -702,7 +703,8 @@ char _seq_next_read_bam(SeqFile *sf)
   if(sf->entry_read)
   {
     // Count skipped bases
-    sf->total_bases_skipped += sf->bam->core.l_qseq - sf->entry_offset;
+    sf->total_bases_skipped += (unsigned long)sf->bam->core.l_qseq -
+                               sf->entry_offset;
   }
 
   if(samread(sf->sam_file, sf->bam) < 0)
@@ -843,7 +845,7 @@ char _seq_read_base_fasta(SeqFile *sf, char *c)
   }
   else
   {
-    *c = next;
+    *c = (char)next;
     return 1;
   }
 }
@@ -865,16 +867,16 @@ char _seq_read_base_bam(SeqFile *sf, char *c)
 {
   // Get reverse
   char is_reversed = sf->bam->core.flag & 16;
-  int query_len = sf->bam->core.l_qseq;
+  unsigned long query_len = (unsigned long)sf->bam->core.l_qseq;
 
-  if(sf->entry_offset >= (unsigned long)query_len)
+  if(sf->entry_offset >= query_len)
     return 0;
 
   uint8_t *seq = bam1_seq(sf->bam);
 
   if(is_reversed)
   {
-    int index = query_len - sf->entry_offset - 1;
+    unsigned long index = query_len - sf->entry_offset - 1;
     int8_t b = bam1_seqi(seq, index);
     *c = bam_nt16_rev_table[seq_comp_table[b]];
   }
@@ -903,7 +905,7 @@ char _seq_read_base_plain(SeqFile *sf, char *c)
   }
   else
   {
-    *c = next;
+    *c = (char)next;
     return 1;
   }
 }
@@ -972,20 +974,20 @@ char _seq_read_qual_fastq(SeqFile *sf, char *c)
     return 0;
   }
 
-  *c = next;
+  *c = (char)next;
   return 1;
 }
 
 char _seq_read_qual_bam(SeqFile *sf, char *c)
 {
   char is_reversed = sf->bam->core.flag & 16;
-  int query_len = sf->bam->core.l_qseq;
+  unsigned long query_len = (unsigned long)sf->bam->core.l_qseq;
 
-  if(sf->entry_offset_qual >= (unsigned long)query_len)
+  if(sf->entry_offset_qual >= query_len)
     return 0;
 
   uint8_t *seq = bam1_qual(sf->bam);
-  int index;
+  unsigned long index;
 
   if(is_reversed)
     index = query_len - sf->entry_offset_qual - 1;
@@ -1093,9 +1095,9 @@ char seq_read_k_quals(SeqFile *sf, char* str, int k)
 
 char _seq_read_all_bases_bam(SeqFile *sf, StrBuf *sbuf)
 {
-  int qlen = sf->bam->core.l_qseq;
+  unsigned long qlen = (unsigned long)sf->bam->core.l_qseq;
 
-  if(sf->entry_offset >= (unsigned long)qlen)
+  if(sf->entry_offset >= qlen)
     return 0;
 
   // Get reverse
@@ -1106,10 +1108,10 @@ char _seq_read_all_bases_bam(SeqFile *sf, StrBuf *sbuf)
   uint8_t *seq = bam1_seq(sf->bam);
 
   // read in and reverse complement (if needed)
-  int i;
+  unsigned long i;
   for(i = sf->entry_offset; i < qlen; i++)
   {
-    int index = (is_reversed ? i : qlen - i - 1);
+    unsigned long index = (is_reversed ? i : qlen - i - 1);
     int8_t b = bam1_seqi(seq, index);
     char c = bam_nt16_rev_table[is_reversed ? seq_comp_table[b] : b];
     strbuf_append_char(sbuf, c);
@@ -1126,7 +1128,7 @@ char _seq_read_all_bases_fasta(SeqFile *sf, StrBuf *sbuf)
   {
     if(c != '\r' && c != '\n')
     {
-      strbuf_append_char(sbuf, c);
+      strbuf_append_char(sbuf, (char)c);
       strbuf_gzreadline(sbuf, sf->gz_file);
       strbuf_chomp(sbuf);
     }
@@ -1206,9 +1208,9 @@ char seq_read_all_bases(SeqFile *sf, StrBuf *sbuf)
 
 char _seq_read_all_quals_bam(SeqFile *sf, StrBuf *sbuf)
 {
-  int qlen = sf->bam->core.l_qseq;
+  unsigned long qlen = (unsigned long)sf->bam->core.l_qseq;
 
-  if(sf->entry_offset_qual >= (unsigned long)qlen)
+  if(sf->entry_offset_qual >= qlen)
     return 0;
 
   // Get reverse
@@ -1219,7 +1221,7 @@ char _seq_read_all_quals_bam(SeqFile *sf, StrBuf *sbuf)
   uint8_t *seq = bam1_qual(sf->bam);
 
   // read in and reverse complement (if needed)
-  int i;
+  unsigned long i;
   for(i = sf->entry_offset; i < qlen; i++)
   {
     char c = sf->fastq_ascii_offset + seq[is_reversed ? i : qlen - i - 1];
@@ -1245,7 +1247,7 @@ char _seq_read_all_quals_fastq(SeqFile *sf, StrBuf *sbuf)
   {
     if(next != '\r' && next != '\n')
     {
-      strbuf_append_char(sbuf, next);
+      strbuf_append_char(sbuf, (char)next);
     }
     else
       sf->line_number++;
@@ -1376,7 +1378,7 @@ unsigned long seq_file_write_name(SeqFile *sf, const char *name)
 #define _write(s,str,len) \
 ((sf)->line_wrap == 0 ? seq_puts((sf), (str)) : _write_wrapped((sf),(str),(len)))
 
-inline size_t _write_wrapped(SeqFile *sf, const char *str, size_t str_len)
+size_t _write_wrapped(SeqFile *sf, const char *str, size_t str_len)
 {
   size_t num_bytes_printed = 0;
 
@@ -1406,7 +1408,7 @@ inline size_t _write_wrapped(SeqFile *sf, const char *str, size_t str_len)
   for(offset = bytes_to_print; offset < str_len; offset += sf->line_wrap)
   {
     bytes_to_print = MIN(str_len - offset, sf->line_wrap);
-    num_bytes_printed += seq_write(sf, str + offset, bytes_to_print);
+    num_bytes_printed += (size_t)seq_write(sf, str + offset, bytes_to_print);
 
     if(bytes_to_print < sf->line_wrap)
     {

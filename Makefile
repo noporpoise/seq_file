@@ -1,3 +1,7 @@
+ifndef $(CC)
+  CC = gcc
+endif
+
 ifdef DEBUG
 	CFLAGS := -DDEBUG=1 --debug
 else
@@ -17,20 +21,22 @@ endif
 # Check mac/linux
 UNAME:=$(shell uname)
 
-ifeq ($(UNAME), Darwin)
-	CFLAGS := $(CFLAGS) -fnested-functions
+CFLAGS := $(CFLAGS) -Wall -Wextra -I$(SAMPATH) -I$(STRING_BUF_PATH)
+
+ifeq ($(CC),gcc)
+  ifeq ($(UNAME), Darwin)
+    CFLAGS := $(CFLAGS) -fnested-functions
+  endif
 endif
 
-CFLAGS := $(CFLAGS) -Wall -Wextra -L$(SAMPATH) -I$(SAMPATH) \
-		  -I$(STRING_BUF_PATH) -L$(STRING_BUF_PATH)
-
+LIB_INCS = -L$(SAMPATH) -L$(STRING_BUF_PATH)
 LIB_FLAGS := -lbam -lm -lz -lstrbuf
 
 all:
-	gcc $(CFLAGS) -o seq_file.o -c seq_file.c
+	$(CC) $(CFLAGS) -o seq_file.o -c seq_file.c
 	ar -csru libseqfile.a seq_file.o
-	gcc -o seq_convert $(CFLAGS) seq_convert.c seq_file.o $(LIB_FLAGS)
-	gcc -o seq_file_test $(CFLAGS) seq_file_test.c seq_file.o $(LIB_FLAGS)
+	$(CC) -o seq_convert $(CFLAGS) $(LIB_INCS) seq_convert.c seq_file.o $(LIB_FLAGS)
+	$(CC) -o seq_file_test $(CFLAGS) $(LIB_INCS) seq_file_test.c seq_file.o $(LIB_FLAGS)
 
 clean:
 	if test -e seq_file.o; then rm seq_file.o; fi
