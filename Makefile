@@ -1,4 +1,4 @@
-ifndef $(CC)
+ifndef CC
   CC = gcc
 endif
 

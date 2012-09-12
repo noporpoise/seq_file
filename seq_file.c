@@ -127,6 +127,7 @@ char _contains_extension(const char *path, const char *ext, const size_t len)
 
   for(tmp = path; (tmp = strstr(tmp, ext)) != NULL; tmp++)
   {
+    // Check extension is followed by end-of-string or separator . or _
     if(*(tmp+len) == '\0' || *(tmp+len) == '.' || *(tmp+len) == '_')
     {
       return 1;
@@ -139,26 +140,29 @@ char _contains_extension(const char *path, const char *ext, const size_t len)
 void seq_guess_filetype_from_path(const char *path, SeqFileType *file_type,
                                   char *zipped)
 {
-  #define ARRLEN 18
+  #define ARRLEN 20
 
   const char* exts[ARRLEN] = {".fa",".fasta",
                               ".fq",".fastq",
                               ".faz",".fagz",".fa.gz",".fa.gzip",".fasta.gzip",
                               ".fqz",".fqgz",".fq.gz",".fq.gzip",".fastq.gzip",
-                              ".txt",".txtgz",".txt.gz",".txt.gzip"};
+                              ".txt",".txtgz",".txt.gz",".txt.gzip",
+                              ".sam", ".bam"};
 
   const SeqFileType types[ARRLEN]
     = {SEQ_FASTA, SEQ_FASTA,
        SEQ_FASTQ, SEQ_FASTQ,
        SEQ_FASTA, SEQ_FASTA, SEQ_FASTA, SEQ_FASTA, SEQ_FASTA,
        SEQ_FASTQ, SEQ_FASTQ, SEQ_FASTQ, SEQ_FASTQ, SEQ_FASTQ,
-       SEQ_PLAIN, SEQ_PLAIN, SEQ_PLAIN, SEQ_PLAIN};
+       SEQ_PLAIN, SEQ_PLAIN, SEQ_PLAIN, SEQ_PLAIN,
+       SEQ_SAM, SEQ_BAM};
 
   const char zips[ARRLEN] = {0, 0,
                              0, 0,
                              1, 1, 1, 1, 1,
                              1, 1, 1, 1, 1,
-                             0, 1, 1, 1};
+                             0, 1, 1, 1,
+                             0, 0};
 
   int i;
   size_t strlens[ARRLEN];
@@ -173,9 +177,11 @@ void seq_guess_filetype_from_path(const char *path, SeqFileType *file_type,
   char* strcpy = strdup(path);
   _str_to_lower(strcpy);
 
+  // Check for an extension at the end
   for(i = 0; i < ARRLEN; i++)
   {
-    if(strcasecmp(path + path_len - strlens[i], exts[i]) == 0)
+    if(path_len >= strlens[i] &&
+       strcasecmp(path + path_len - strlens[i], exts[i]) == 0)
     {
       *file_type = types[i];
       *zipped = zips[i];
@@ -184,6 +190,7 @@ void seq_guess_filetype_from_path(const char *path, SeqFileType *file_type,
     }
   }
 
+  // Check for an extension anywhere in the filename
   for(i = 0; i < ARRLEN; i++)
   {
     if(_contains_extension(path, exts[i], strlens[i]))
@@ -199,32 +206,32 @@ void seq_guess_filetype_from_path(const char *path, SeqFileType *file_type,
 // Determines file type and opens necessary streams + mallocs memory
 void _set_seq_filetype(SeqFile *sf)
 {
-  size_t path_len = strlen(sf->path);
+  // Guess filetype from path
+  SeqFileType file_type;
+  char zipped;
 
-  if(path_len > 4)
+  seq_guess_filetype_from_path(sf->path, &file_type, &zipped);
+
+
+  if(file_type == SEQ_SAM)
   {
-    char* path_cpy = strdup(sf->path);
-    _str_to_lower(path_cpy);
-
-    if(_contains_extension(path_cpy, ".sam", 4))
-    {
-      sf->sam_file = samopen(sf->path, "r", 0);
-      sf->file_type = SEQ_SAM;
-    }
-    else if(_contains_extension(path_cpy, ".bam", 4))
-    {
-      sf->sam_file = samopen(sf->path, "rb", 0);
-      sf->file_type = SEQ_BAM;
-    }
-
-    free(path_cpy);
-
-    if(sf->file_type != SEQ_UNKNOWN)
-    {
-      sf->bam = bam_init1();
-      return;
-    }
+    // SAM
+    sf->sam_file = samopen(sf->path, "r", 0);
+    sf->file_type = SEQ_SAM;
+    sf->bam = bam_init1();
+    return;
   }
+  else if(file_type == SEQ_BAM)
+  {
+    // BAM
+    sf->sam_file = samopen(sf->path, "rb", 0);
+    sf->file_type = SEQ_BAM;
+    sf->bam = bam_init1();
+    return;
+  }
+
+  // If not SAM or BAM, we can open it and determine its contents -
+  // more reliable
 
   // Open file for the first time
   if(strcmp(sf->path, "-") == 0)
