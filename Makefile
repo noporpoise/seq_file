@@ -3,18 +3,16 @@ ifndef CC
 endif
 
 ifdef DEBUG
-	CFLAGS := -DDEBUG=1 --debug
+	CFLAGS := -DDEBUG=1 --debug -g
 else
 	CFLAGS := -O3
 endif
 
-LIB_PATH=$(HOME)/c/libs
-
-ifndef $STRING_BUF_PATH
-	STRING_BUF_PATH=$(LIB_PATH)/string_buffer
+ifndef STRING_BUF_PATH
+	STRING_BUF_PATH=$(HOME)/c/libs/string_buffer
 endif
 
-ifndef $SAMPATH
+ifndef SAM_PATH
 	SAMPATH=$(HOME)/bioinf/samtools-0.1.18
 endif
 
