@@ -12,14 +12,14 @@ ifndef STRING_BUF_PATH
 	STRING_BUF_PATH=$(HOME)/c/libs/string_buffer
 endif
 
-ifndef SAM_PATH
-	SAMPATH=$(HOME)/bioinf/samtools-0.1.18
+ifndef SAMTOOLS_PATH
+	SAMTOOLS_PATH=$(HOME)/bioinf/samtools-0.1.18
 endif
 
 # Check mac/linux
 UNAME:=$(shell uname)
 
-CFLAGS := $(CFLAGS) -Wall -Wextra -I$(SAMPATH) -I$(STRING_BUF_PATH)
+CFLAGS := $(CFLAGS) -Wall -Wextra -I$(SAMTOOLS_PATH) -I$(STRING_BUF_PATH)
 
 ifeq ($(CC),gcc)
   ifeq ($(UNAME), Darwin)
@@ -27,8 +27,8 @@ ifeq ($(CC),gcc)
   endif
 endif
 
-LIB_INCS := -L$(SAMPATH) -L$(STRING_BUF_PATH)
-LIB_FLAGS := -lbam -lm -lz -lstrbuf
+LIB_INCS := -L$(SAMTOOLS_PATH) -L$(STRING_BUF_PATH)
+LIB_FLAGS := -lbam -lstrbuf -lz -lm
 
 ifdef ZLIB_PATH
 	LIB_INCS := $(LIB_INCS) -L$(ZLIB_PATH)
