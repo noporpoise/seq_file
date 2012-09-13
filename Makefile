@@ -27,8 +27,12 @@ ifeq ($(CC),gcc)
   endif
 endif
 
-LIB_INCS = -L$(SAMPATH) -L$(STRING_BUF_PATH)
+LIB_INCS := -L$(SAMPATH) -L$(STRING_BUF_PATH)
 LIB_FLAGS := -lbam -lm -lz -lstrbuf
+
+ifdef ZLIB_PATH
+	LIB_INCS := $(LIB_INCS) -L$(ZLIB_PATH)
+endif
 
 all:
 	$(CC) $(CFLAGS) -o seq_file.o -c seq_file.c

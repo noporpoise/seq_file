@@ -45,11 +45,15 @@ Seq_file requires:
 sam_tools [http://samtools.sourceforge.net/]
 string_buffer [https://github.com/noporpoise/string_buffer]
 
-It also requires libz, which should already be installed.  
+It also requires zlib, which should already be installed.  
 
 To build the test code and the program seq_convert:
 
     make STRING_BUF_PATH=path/to/string_buffer/ SAM_PATH=path/to/samtools/
+
+Sometimes the linker can't find your libz.a file (zlib), so you may need to try:
+
+    make STRING_BUF_PATH=path/to/string_buffer/ SAM_PATH=path/to/samtools/ ZLIB_PATH=/dir/with/libz/in/
 
 To call in your own programs, use the following in your Makefile etc.
 
