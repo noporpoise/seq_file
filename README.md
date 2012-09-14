@@ -55,17 +55,13 @@ Sometimes the linker can't find your libz.a file (zlib), so you may need to try:
 
     make STRING_BUF_PATH=path/to/string_buffer/ SAMTOOLS_PATH=path/to/samtools/ ZLIB_PATH=/dir/with/libz/in/
 
-To call in your own programs, use the following in your Makefile etc.
+To call from your own programs, use the following in your Makefile etc.
 
     LIBS=-lseqfile -lbam -lstrbuf -lz
     INCS=-I$(PATH_TO_SAMTOOLS) -I$(PATH_TO_STRING_BUFFER) -I$(PATH_TO_SEQ_FILE) \
          -L$(PATH_TO_SAMTOOLS) -L$(PATH_TO_STRING_BUFFER) -L$(PATH_TO_SEQ_FILE)
     gcc $(INCS) <your files / args etc.> $(LIBS)
 
-Linking
--------
-
-In order to use in your own
 
 Functions
 =========
@@ -77,8 +73,7 @@ Open a file for reading
 
     SeqFile* seq_file_open(const char* path);
 
-Open a file for writing.  
-Returns the number of bytes written or 0 on failure
+Open a file for writing.  Returns the number of bytes written or 0 on failure
 
     SeqFile* seq_file_open_write(const char* file_path, const SeqFileType file_type,
                                  const char gzip, const unsigned long line_wrap);
@@ -95,11 +90,11 @@ Get the next sequence read.  Returns 1 on success 0 if no more to read
 
     char seq_next_read(SeqFile *sf);
 
-Get the name of the next read
+Get the name of the current read
 
     const char* seq_get_read_name(SeqFile *sf);
 
-Get this read index -- starts from 0
+Get this index of the current read -- starts from 0
 
     unsigned long seq_get_read_index(SeqFile *sf);
 
@@ -111,29 +106,30 @@ Get the distance into this read's quality scores that we have read
 
     unsigned long seq_get_qual_offset(SeqFile *sf);
 
-If seq_next_read() returned 1 and seq_read_base() is now returning 0,
-seq_get_length() will now report the correct read length
+If seq_next_read() returned 1 and seq_read_base() is now returning 0 (i.e we
+have read all the bases), seq_get_length() will now report the correct read
+length
 
     unsigned long seq_get_length(SeqFile *sf);
 
-Read a single base from the current read
-Returns 1 on success, 0 if no more quality scores or run out of bases
+Read a single base from the current read.
+Returns 1 on success, 0 if no more bases
 
     char seq_read_base(SeqFile *sf, char *c);
 
-Read a single quality score from the current read
-Returns 1 on success, 0 if no more quality scores or run out of bases
+Read a single quality score from the current read.
+Returns 1 on success, 0 if no more quality scores
 
     char seq_read_qual(SeqFile *sf, char *c);
 
-Read `k` bases of the current read.  `str` must be at least k+1 bytes long.
-Returns 1 on success, 0 otherwise
+Read `k` bases/quality scores of the current read into `str`.  `str` must be at
+least k+1 bytes long. Returns 1 on success, 0 otherwise
 
     char seq_read_k_bases(SeqFile *sf, char* str, int k);
     char seq_read_k_quals(SeqFile *sf, char* str, int k);
 
-Read all remaining bases from the current read.
-Returns 1 on success, 0 otherwise.
+Read all remaining bases/quality scores from the current read into a
+string_buffer. Returns 1 on success, 0 otherwise.
 
     char seq_read_all_bases(SeqFile *sf, StrBuf *sbuf);
     char seq_read_all_quals(SeqFile *sf, StrBuf *sbuf);
@@ -141,7 +137,7 @@ Returns 1 on success, 0 otherwise.
 Writing
 -------
 
-Returns 1 if open for writing, 0 otherwise
+Check if a file is open for writing. Returns 1 if open for writing, 0 otherwise.
 
     char seq_is_open_for_write(const SeqFile *sf);
 
@@ -199,6 +195,38 @@ seq_file
 seq_convert
  * Add pair-end awareness: bam to 2 fastq files
 
+Proposed new writings method:
+
+    // Called in any order, multiple times
+    seq_file_prime_name(SeqFile* sf, char* name);
+    seq_file_prime_seq(SeqFile* sf, char* name);
+    seq_file_prime_qual(SeqFile* sf, char* name);
+
+    // Called to force write out
+    seq_file_write_flush(SeqFile* sf);
+
+Proposed new API to deal with mate pairs:
+
+    typedef struct SeqRead;
+
+    SeqRead* seq_file_create_read();
+    seq_file_free_read(SeqRead *sr);
+
+    char seq_file_next_read(SeqFile *sf, SeqRead *sr);
+    char seq_file_next_read_mp(SeqFile *sf, SeqRead *sr1, SeqRead *sr2);
+
+    // Then we can use the following to read
+    char seq_read_base(SeqRead *sr, char *c);
+    char seq_read_qual(SeqRead *sr, char *c);
+    char seq_read_k_bases(SeqRead *sr, char* str, int k);
+    char seq_read_k_quals(SeqRead *sr, char* str, int k);
+    char seq_read_all_bases(SeqRead *sr, StrBuf *sbuf);
+    char seq_read_all_quals(SeqRead *sr, StrBuf *sbuf);
+
+    // Get position etc
+    unsigned long seq_get_base_offset(SeqRead *sr);
+    unsigned long seq_get_qual_offset(SeqRead *sr);
+    unsigned long seq_get_length(SeqRead *sr);
 
 License
 =======
