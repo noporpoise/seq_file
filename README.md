@@ -69,17 +69,17 @@ Functions
 Opening / Closing
 -----------------
 
-Open a file for reading
+Open a file for reading.
 
     SeqFile* seq_file_open(const char* path);
 
-Open a file for writing.  Returns the number of bytes written or 0 on failure
+Open a file for writing.
 
     SeqFile* seq_file_open_write(const char* file_path, const SeqFileType file_type,
                                  const char gzip, const unsigned long line_wrap);
 
-Close a file. If open for writing: writes newline to file and returns 1 on
-success, otherwise returns 0.
+Close a file. If open for writing: flushes changes and returns number of bytes
+written.  
 
     size_t seq_file_close(SeqFile *sf);
 
