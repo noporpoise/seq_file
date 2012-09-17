@@ -1,6 +1,6 @@
 /*
- seq_reader.c
- project: seq_reader
+ seq_file.c
+ project: seq_file
  author: Isaac Turner <turner.isaac@gmail.com>
  Copyright (C) 20-June-2012
  
@@ -77,6 +77,8 @@ struct SeqFile
   enum SeqFileType file_type;
 
   // have we seen a '>' at the start of a line in a fasta file?
+  // or a '@' in a fastq?
+  // For 'plain' format files this is used to store the first char per entry
   char read_line_start;
 
   // name, index and bases-read/offset of current entry
@@ -212,7 +214,6 @@ void _set_seq_filetype(SeqFile *sf)
 
   seq_guess_filetype_from_path(sf->path, &file_type, &zipped);
 
-
   if(file_type == SEQ_SAM)
   {
     // SAM
@@ -261,7 +262,7 @@ void _set_seq_filetype(SeqFile *sf)
 
   if(first_char == -1)
   {
-    fprintf(stderr, "seq_reader.c warning: empty sequence file\n");
+    fprintf(stderr, "seq_file.c warning: empty sequence file\n");
     return;
   }
   else if(first_char == '>')
@@ -279,12 +280,19 @@ void _set_seq_filetype(SeqFile *sf)
   }
   else if(is_base_char(first_char))
   {
+    // Plain file
     sf->file_type = SEQ_PLAIN;
-    sf->read_line_start = (char)first_char;
+    sf->read_line_start = 0;
+
+    if(gzungetc(first_char, sf->gz_file) == -1)
+    {
+      fprintf(stderr, "seq_file.c error: gzungetc failed\n");
+      exit(EXIT_FAILURE);
+    }
   }
   else
   {
-    fprintf(stderr, "seq_reader.c warning: unknown filetype starting '%c'\n",
+    fprintf(stderr, "seq_file.c warning: unknown filetype starting '%c'\n",
             first_char);
   }
 }
@@ -380,7 +388,7 @@ SeqFile* seq_file_open_filetype(const char* file_path,
       }
       break;
     default:
-      fprintf(stderr, "seq_reader.c warning: invalid SeqFileType in "
+      fprintf(stderr, "seq_file.c warning: invalid SeqFileType in "
                       "function seq_file_open_filetype()\n");
       free(sf);
       return NULL;
@@ -398,17 +406,17 @@ SeqFile* seq_file_open_write(const char* file_path, SeqFileType file_type,
 {
   if(file_type == SEQ_SAM || file_type == SEQ_BAM)
   {
-    fprintf(stderr, "seq_reader.c error: cannot write to a SAM or BAM file\n");
+    fprintf(stderr, "seq_file.c error: cannot write to a SAM or BAM file\n");
     return NULL;
   }
   else if(file_type == SEQ_UNKNOWN)
   {
-    fprintf(stderr, "seq_reader.c error: cannot open file type SEQ_UNKNOWN\n");
+    fprintf(stderr, "seq_file.c error: cannot open file type SEQ_UNKNOWN\n");
     return NULL;
   }
   else if(file_type == SEQ_PLAIN && line_wrap != 0)
   {
-    fprintf(stderr, "seq_reader.c warning: cannot set line wrap with 'plain' "
+    fprintf(stderr, "seq_file.c warning: cannot set line wrap with 'plain' "
                     "sequence format\n");
     line_wrap = 0;
   }
@@ -567,8 +575,10 @@ char _seq_next_read_fasta(SeqFile *sf)
     // Read name
     strbuf_gzreadline(sf->entry_name, sf->gz_file);
     strbuf_chomp(sf->entry_name);
+
     sf->line_number++;
     sf->read_line_start = 0;
+
     return 1;
   }
   else
@@ -728,10 +738,7 @@ char _seq_next_read_plain(SeqFile *sf)
   if(sf->read_line_start)
   {
     sf->read_line_start = 0;
-    return 1;
-  }
-  else
-  {
+
     int c;
 
     while((c = gzgetc(sf->gz_file)) != -1 && c != '\r' && c != '\n')
@@ -743,6 +750,26 @@ char _seq_next_read_plain(SeqFile *sf)
       return 0;
     else
       sf->line_number++;
+
+    return 1;
+  }
+  else
+  {
+    // Check if we can read a base
+    int c = gzgetc(sf->gz_file);
+
+    if(c == -1)
+    {
+      return 0;
+    }
+    else if(c == '\n' || c == '\r')
+    {
+      sf->line_number++;
+    }
+    else
+    {
+      sf->read_line_start = (char)c;
+    }
 
     return 1;
   }
@@ -898,6 +925,13 @@ char _seq_read_base_bam(SeqFile *sf, char *c)
 
 char _seq_read_base_plain(SeqFile *sf, char *c)
 {
+  if(sf->read_line_start != 0)
+  {
+    *c = sf->read_line_start;
+    sf->read_line_start = 0;
+    return 1;
+  }
+
   int next = gzgetc(sf->gz_file);
 
   if(next == -1)
@@ -907,7 +941,6 @@ char _seq_read_base_plain(SeqFile *sf, char *c)
   else if(next == '\r' || next == '\n')
   {
     sf->line_number++;
-    sf->read_line_start = 1;
     return 0;
   }
   else
@@ -1160,7 +1193,16 @@ char _seq_read_all_bases_fastq(SeqFile *sf, StrBuf *sbuf)
 
 char _seq_read_all_bases_plain(SeqFile *sf, StrBuf *sbuf)
 {
-  t_buf_pos len = strbuf_gzreadline(sbuf, sf->gz_file);
+  t_buf_pos len = 0;
+
+  if(sf->read_line_start)
+  {
+    strbuf_append_char(sbuf, sf->read_line_start);
+    sf->read_line_start = 0;
+    len++;
+  }
+
+  len += strbuf_gzreadline(sbuf, sf->gz_file);
   strbuf_chomp(sbuf);
   sf->line_number++;
 
@@ -1302,7 +1344,6 @@ char seq_read_all_quals(SeqFile *sf, StrBuf *sbuf)
   return success;
 }
 
-
 /*
  Write to a file. 
  Each function returns the number of bytes written or 0 on failure
@@ -1316,7 +1357,7 @@ unsigned long _seq_file_write_name_fasta(SeqFile *sf, const char *name)
   {
     num_bytes_printed += seq_puts(sf, ">");
   }
-  else if(sf->write_state == WS_SEQ)
+  else
   {
     num_bytes_printed += seq_puts(sf, "\n>");
     sf->line_number++;
@@ -1329,23 +1370,26 @@ unsigned long _seq_file_write_name_fasta(SeqFile *sf, const char *name)
 
 unsigned long _seq_file_write_name_fastq(SeqFile *sf, const char *name)
 {
-  if(sf->write_state == WS_SEQ)
-  {
-    fprintf(stderr, "seq_file.c: writing in the wrong order (name) [path: %s]\n",
-            sf->path);
-    exit(EXIT_FAILURE);
-  }
-
   unsigned long num_bytes_printed = 0;
 
   if(sf->write_state == WS_BEGIN)
   {
     num_bytes_printed += seq_puts(sf, "@");
   }
+  else if(sf->write_state == WS_NAME)
+  {
+    num_bytes_printed += seq_puts(sf, "\n\n+\n\n@");
+  }
   else if(sf->write_state == WS_QUAL)
   {
     num_bytes_printed += seq_puts(sf, "\n@");
     sf->line_number++;
+  }
+  else if(sf->write_state == WS_SEQ)
+  {
+    fprintf(stderr, "seq_file.c: writing in the wrong order (name) [path: %s]\n",
+            sf->path);
+    exit(EXIT_FAILURE);
   }
 
   num_bytes_printed += seq_puts(sf, name);
@@ -1492,9 +1536,6 @@ size_t _seq_file_write_seq_plain(SeqFile *sf, const char *seq)
 size_t seq_file_write_seq(SeqFile *sf, const char *seq)
 {
   size_t str_len = strlen(seq);
-
-  if(str_len == 0)
-    return 0;
 
   unsigned long num_bytes_printed = 0;
 

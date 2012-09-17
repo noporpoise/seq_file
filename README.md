@@ -20,30 +20,30 @@ format.  Pass a file to seq_file_open() and then read sequences using
 seq_next_read() without having to worry about what the file format is.  
 
 Currently supports:
-- SAM & BAM
-- FASTA (& gzipped fasta)
-- FASTQ (& gzipped fastq)
-- 'plain' format (one sequence per line [.txt]) (& gzipped plain [.txt.gz])
+* SAM & BAM
+* FASTA (& gzipped fasta)
+* FASTQ (& gzipped fastq)
+* 'plain' format (one sequence per line [.txt]) (& gzipped plain [.txt.gz])
 
 Also included is a simple example program (seq_convert) that converts between
 file formats, for example:
 
-$ seq_convert in.fq.gz out.fa
-$ seq_convert in.fa out.fq.gz
-$ seq_convert in.bam out.fa.gz
-$ seq_convert in.sam out.txt
+    $ seq_convert in.fq.gz out.fa
+    $ seq_convert in.fa out.fq.gz
+    $ seq_convert in.bam out.fa.gz
+    $ seq_convert in.sam out.txt
 
 It can also 'wrap lines' in the output:
 
-$ seq_convert in.fq.gz out.fa 80
+    $ seq_convert in.fq.gz out.fa 80
 
 Build
 =====
 
 Seq_file requires:
 
-sam_tools [http://samtools.sourceforge.net/]
-string_buffer [https://github.com/noporpoise/string_buffer]
+* sam_tools [http://samtools.sourceforge.net/]
+* string_buffer [https://github.com/noporpoise/string_buffer]
 
 It also requires zlib, which should already be installed.  
 
@@ -189,21 +189,13 @@ To run some basic test:
 
 TODO:
 seq_file
+ * Split into a file for each format
  * Retrieve mate pair data etc from a sam/bam
- * Add support for sra
+ * Add support for sra?
  
 seq_convert
- * Add pair-end awareness: bam to 2 fastq files
-
-Proposed new writings method:
-
-    // Called in any order, multiple times
-    seq_file_prime_name(SeqFile* sf, char* name);
-    seq_file_prime_seq(SeqFile* sf, char* name);
-    seq_file_prime_qual(SeqFile* sf, char* name);
-
-    // Called to force write out
-    seq_file_write_flush(SeqFile* sf);
+ * Add pair-end awareness: bam to two fastq files
+ * Add support for [file] to [.bam|.sam] -- unmapped
 
 Proposed new API to deal with mate pairs:
 
@@ -212,8 +204,13 @@ Proposed new API to deal with mate pairs:
     SeqRead* seq_file_create_read();
     seq_file_free_read(SeqRead *sr);
 
+    // 1)
     char seq_file_next_read(SeqFile *sf, SeqRead *sr);
     char seq_file_next_read_mp(SeqFile *sf, SeqRead *sr1, SeqRead *sr2);
+
+    // OR 2)
+    char seq_file_next_template(SeqFile *sf, SeqTemplate *st);
+    char seq_file_next_read(SeqTemplate st*, SeqRead* sr);
 
     // Then we can use the following to read
     char seq_read_base(SeqRead *sr, char *c);

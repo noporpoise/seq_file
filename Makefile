@@ -41,9 +41,4 @@ all:
 	$(CC) -o seq_file_test $(CFLAGS) $(LIB_INCS) seq_file_test.c seq_file.o $(LIB_FLAGS)
 
 clean:
-	if test -e seq_file.o; then rm seq_file.o; fi
-	if test -e libseqfile.a; then rm libseqfile.a; fi
-	if test -e seq_convert; then rm seq_convert; fi
-	if test -e seq_file_test; then rm seq_file_test; fi
-	for file in $(wildcard *.dSYM); do rm -r $$file; done
-	for file in $(wildcard *.greg); do rm $$file; done
+	rm -rf seq_file.o libseqfile.a seq_convert seq_file_test seq_file.dSYM seq_file.greg

@@ -1,3 +1,5 @@
-TCAGAataagcaacagctcasd
-aaaggcttcagggtaaat
-gggaggggaagactctgtga
+CCAGAataagcaacagcttc
+aaaggcttcagggtaaatt
+
+
+gggaggggaagactcttgtg
