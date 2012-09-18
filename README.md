@@ -5,9 +5,7 @@ C Library for reading multiple bioinformatics sequence file formats
 
 https://github.com/noporpoise/seq_file
 
-Isaac Turner
-
-turner.isaac@gmail.com
+Isaac Turner turner.isaac@gmail.com
 
 4 July 2012, GPLv3
 
@@ -183,19 +181,17 @@ Development
 Please get in touch if you find bugs, have questions or can suggest features.  
 Isaac <turner.isaac@gmail.com>
 
-To run some basic test:
+To run some basic tests:
 
     for f in test/*; do echo $f >&2; ./seq_file_test $f; done > test/tests.out
 
 TODO:
 seq_file
- * Split into a file for each format
- * Retrieve mate pair data etc from a sam/bam
- * Add support for sra?
- 
-seq_convert
- * Add pair-end awareness: bam to two fastq files
  * Add support for [file] to [.bam|.sam] -- unmapped
+ * re-write output writing code
+ * Retrieve mate pair data etc from a sam/bam, pairs of fastq/fasta
+ * Add pair-end support to seq_convert
+ * Add support for sra?
 
 Proposed new API to deal with mate pairs:
 

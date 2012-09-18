@@ -1,6 +1,6 @@
 /*
- seq_reader.c
- project: seq_reader
+ seq_file_test.c
+ project: seq_file
  author: Isaac Turner <turner.isaac@gmail.com>
  Copyright (C) 21 June 2012
 
