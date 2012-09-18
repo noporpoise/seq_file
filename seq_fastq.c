@@ -1,0 +1,245 @@
+
+#include "seq_fastq.h"
+
+void _seq_read_fastq_sequence(SeqFile *sf)
+{
+  strbuf_reset(sf->bases_buff);
+
+  int c;
+
+  while((c = gzgetc(sf->gz_file)) != -1 && c != '+')
+  {
+    if(c != '\r' && c != '\n')
+    {
+      strbuf_append_char(sf->bases_buff, (char)c);
+      strbuf_gzreadline(sf->bases_buff, sf->gz_file);
+      strbuf_chomp(sf->bases_buff);
+    }
+
+    sf->line_number++;
+  }
+
+  if(c == -1)
+  {
+    fprintf(stderr, "seq_file.c: missing + in FASTQ [file: %s]\n", sf->path);
+  }
+
+  // Read to end of separator line
+  if(c != '\r' && c != '\n')
+  {
+    strbuf_gzskip_line(sf->gz_file);
+  }
+}
+
+char seq_next_read_fastq(SeqFile *sf)
+{
+  if(sf->read_line_start)
+  {
+    // Read name
+    strbuf_gzreadline(sf->entry_name, sf->gz_file);
+    strbuf_chomp(sf->entry_name);
+    sf->line_number++;
+
+    // Read whole sequence
+    _seq_read_fastq_sequence(sf);
+
+    sf->read_line_start = 0;
+    return 1;
+  }
+  else
+  {
+    int c;
+
+    // Count bases not read in
+    sf->total_bases_skipped += (strbuf_len(sf->bases_buff) - sf->entry_offset);
+
+    // Skip over remaining quality values
+    while(sf->entry_offset_qual < strbuf_len(sf->bases_buff))
+    {
+      if((c = gzgetc(sf->gz_file)) == -1)
+        return 0;
+
+      if(c != '\r' && c != '\n')
+        sf->entry_offset_qual++;
+      else
+        sf->line_number++;
+    }
+
+    // Skip newlines
+    while((c = gzgetc(sf->gz_file)) != -1 && (c == '\n' || c == '\r'))
+      sf->line_number++;
+
+    if(c == -1)
+      return 0;
+
+    if(c != '@')
+    {
+      fprintf(stderr, "seq_file.c: FASTQ header does not begin with '@' [%c]\n",
+              c);
+      return 0;
+    }
+
+    // Read name
+    strbuf_gzreadline(sf->entry_name, sf->gz_file);
+    strbuf_chomp(sf->entry_name);
+    sf->line_number++;
+
+    // Read whole sequence
+    _seq_read_fastq_sequence(sf);
+
+    return 1;
+  }
+}
+
+char seq_read_base_fastq(SeqFile *sf, char *c)
+{
+  if(sf->entry_offset < strbuf_len(sf->bases_buff))
+  {
+    *c = strbuf_get_char(sf->bases_buff, sf->entry_offset);
+    return 1;
+  }
+  else
+  {
+    return 0;
+  }
+}
+
+char seq_read_qual_fastq(SeqFile *sf, char *c)
+{
+  if(sf->entry_offset_qual >= strbuf_len(sf->bases_buff))
+    return 0;
+
+  int next;
+
+  while((next = gzgetc(sf->gz_file)) != -1 && (next == '\n' || next == '\r'))
+    sf->line_number++;
+
+  if(next == -1)
+  {
+    fprintf(stderr, "seq_file.c: fastq file ended without finishing quality "
+                    "scores [file: %s]\n", sf->path);
+    return 0;
+  }
+
+  *c = (char)next;
+  return 1;
+}
+
+char seq_read_all_bases_fastq(SeqFile *sf, StrBuf *sbuf)
+{
+  // Copy from buffer
+  t_buf_pos len = sf->bases_buff->len - sf->entry_offset;
+  strbuf_copy(sbuf, 0, sf->bases_buff, sf->entry_offset, len);
+
+  return 1;
+}
+
+char seq_read_all_quals_fastq(SeqFile *sf, StrBuf *sbuf)
+{
+  if(sf->entry_offset_qual >= strbuf_len(sf->bases_buff))
+    return 0;
+
+  // Expect the same number of quality scores as bases
+  t_buf_pos expected_len = strbuf_len(sf->bases_buff) -
+                           sf->entry_offset_qual;
+
+  int next = -1;
+  t_buf_pos i;
+
+  for(i = 0; i < expected_len && (next = gzgetc(sf->gz_file)) != -1; i++)
+  {
+    if(next != '\r' && next != '\n')
+    {
+      strbuf_append_char(sbuf, (char)next);
+    }
+    else
+      sf->line_number++;
+  }
+
+  if(next == -1)
+  {
+    fprintf(stderr, "seq_file.c: fastq file ended without finishing quality "
+                    "scores (FASTQ) [file: %s]\n", sf->path);
+  }
+
+  return 1;
+}
+
+unsigned long seq_file_write_name_fastq(SeqFile *sf, const char *name)
+{
+  unsigned long num_bytes_printed = 0;
+
+  if(sf->write_state == WS_BEGIN)
+  {
+    num_bytes_printed += seq_puts(sf, "@");
+  }
+  else if(sf->write_state == WS_NAME)
+  {
+    num_bytes_printed += seq_puts(sf, "\n\n+\n\n@");
+  }
+  else if(sf->write_state == WS_QUAL)
+  {
+    num_bytes_printed += seq_puts(sf, "\n@");
+    sf->line_number++;
+  }
+  else if(sf->write_state == WS_SEQ)
+  {
+    fprintf(stderr, "seq_file.c: writing in the wrong order (name) [path: %s]\n",
+            sf->path);
+    exit(EXIT_FAILURE);
+  }
+
+  num_bytes_printed += seq_puts(sf, name);
+
+  return num_bytes_printed;
+}
+
+size_t seq_file_write_seq_fastq(SeqFile *sf, const char *seq, size_t str_len)
+{
+  if(sf->write_state == WS_BEGIN || sf->write_state == WS_QUAL)
+  {
+    fprintf(stderr, "seq_file.c: writing in the wrong order (seq) [path: %s]\n",
+            sf->path);
+    exit(EXIT_FAILURE);
+  }
+
+  size_t num_bytes_printed = 0;
+
+  if(sf->write_state == WS_NAME)
+  {
+    num_bytes_printed += seq_puts(sf, "\n");
+    sf->line_number++;
+  }
+
+  num_bytes_printed += _write(sf, seq, str_len);
+
+  return num_bytes_printed;
+}
+
+size_t seq_file_write_qual_fastq(SeqFile *sf, const char *qual)
+{
+  if(sf->write_state == WS_BEGIN || sf->write_state == WS_NAME)
+  {
+    fprintf(stderr, "seq_file.c: writing in the wrong order (qual) [path: %s]\n",
+            sf->path);
+    exit(EXIT_FAILURE);
+  }
+
+  size_t str_len = strlen(qual);
+
+  if(str_len == 0)
+    return 0;
+
+  size_t num_bytes_printed = 0;
+
+  if(sf->write_state == WS_SEQ)
+  {
+    num_bytes_printed += seq_puts(sf, "\n+\n");
+    sf->line_number += 2;
+  }
+
+  num_bytes_printed += _write(sf, qual, str_len);
+  sf->write_state = WS_QUAL;
+
+  return num_bytes_printed;
+}

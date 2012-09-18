@@ -22,30 +22,17 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h> // tolower
-#include <zlib.h>
+
+#include "sam.h"
+#include "string_buffer.h"
 
 #include "seq_file.h"
-#include "sam.h"
+#include "seq_common.h"
 
-#define MIN(x,y) ((x) <= (y) ? (x) : (y))
-
-#define is_base_char(x) ((x) == 'a' || (x) == 'A' || \
-                         (x) == 'c' || (x) == 'C' || \
-                         (x) == 'g' || (x) == 'G' || \
-                         (x) == 't' || (x) == 'T' || \
-                         (x) == 'n' || (x) == 'N')
-
-// Write output MACROs
-// wrapper for fputs/gzputs
-#define seq_puts(f,str) (size_t) \
-((f)->plain_file != NULL ? (size_t)fputs((str), (f)->plain_file) \
-                         : (size_t)gzputs((f)->gz_file, (str)))
-
-// wrapper for fwrite/gzwrite
-#define seq_write(f,str,len) (size_t) \
-((f)->plain_file != NULL \
-  ? (size_t)fwrite((str), sizeof(char), (size_t)(len), (f)->plain_file) \
-  : (size_t)gzwrite((f)->gz_file, (str), (unsigned int)(len)))
+#include "seq_fasta.h"
+#include "seq_fastq.h"
+#include "seq_plain.h"
+#include "seq_sam.h"
 
 const char* seq_file_types[6]
   = {"Unknown", "FASTA", "FASTQ", "Plain", "SAM", "BAM"};
@@ -53,65 +40,6 @@ const char* seq_file_types[6]
 const char* seq_file_types_zipped[6]
   = {"Unknown(zipped)", "FASTA(zipped)", "FASTQ(zipped)", "Plain(zipped)",
      "SAM", "BAM"};
-
-// Array for complementing bases read from BAM/SAM files
-int8_t seq_comp_table[16] = {0,8,4,12,2,10,9,14,1,6,5,13,3,11,7,15};
-
-// Printed nothing, then name, then some sequence, then some qualities
-// ... then ready to print a name again
-typedef enum WriteState
-  {WS_READ_ONLY, WS_BEGIN, WS_NAME, WS_SEQ, WS_QUAL} WriteState;
-
-struct SeqFile
-{
-  const char *path;
-
-  gzFile *gz_file; // for reading FASTA/FASTQ/plain
-  samfile_t *sam_file; // For reading SAM/BAM
-
-  // For reading sam/bams
-  bam1_t *bam;
-
-  char fastq_ascii_offset; // defaults to 33
-
-  enum SeqFileType file_type;
-
-  // have we seen a '>' at the start of a line in a fasta file?
-  // or a '@' in a fastq?
-  // For 'plain' format files this is used to store the first char per entry
-  char read_line_start;
-
-  // name, index and bases-read/offset of current entry
-  StrBuf *entry_name;
-  unsigned long entry_index;
-  
-  unsigned long entry_offset, entry_offset_qual;
-
-  // Whether an entry has been read in
-  char entry_read, entry_read_qual;
-
-  // Buffer for reading in bases in FASTQ files
-  StrBuf *bases_buff;
-
-  // Total bases read/written - initially 0
-  unsigned long total_bases_passed;
-  // Total bases skipped (not read through API) in file so far
-  unsigned long total_bases_skipped;
-
-  unsigned long line_number;
-
-  /* Writing preferences */
-
-  // Output plain file for writing if not gzipping output
-  // (newer zlib allows you to do this with gzFile, but mac version is outdated)
-  FILE *plain_file;
-
-  // 0 if no wrap, otherwise max bases per line
-  unsigned long line_wrap, curr_line_length;
-
-  // State of writing
-  WriteState write_state;
-};
 
 //
 // Sequence File reader
@@ -568,260 +496,6 @@ char seq_is_open_for_write(const SeqFile *sf)
   return (sf->write_state != WS_READ_ONLY);
 }
 
-char _seq_next_read_fasta(SeqFile *sf)
-{
-  if(sf->read_line_start)
-  {
-    // Read name
-    strbuf_gzreadline(sf->entry_name, sf->gz_file);
-    strbuf_chomp(sf->entry_name);
-
-    sf->line_number++;
-    sf->read_line_start = 0;
-
-    return 1;
-  }
-  else
-  {
-    int c;
-
-    // Look for line starting with >
-    do
-    {
-      // Read until the end of the line
-      while((c = gzgetc(sf->gz_file)) != -1 && c != '\n' && c != '\r')
-      {
-        sf->total_bases_skipped++;
-      }
-
-      if(c == -1)
-        return 0;
-      else
-        sf->line_number++; // Must have read a new line
-
-      // Read through end of line chars
-      while((c = gzgetc(sf->gz_file)) != -1 && (c == '\n' || c == '\r'))
-      {
-        sf->line_number++;
-      }
-
-      if(c == -1)
-      {
-        return 0;
-      }
-      else if(c != '>')
-      {
-        sf->total_bases_skipped++;
-      }
-    }
-    while(c != '>');
-
-    // Read name
-    strbuf_gzreadline(sf->entry_name, sf->gz_file);
-    strbuf_chomp(sf->entry_name);
-    sf->line_number++;
-
-    return 1;
-  }
-}
-
-void _seq_read_fastq_sequence(SeqFile *sf)
-{
-  strbuf_reset(sf->bases_buff);
-
-  int c;
-
-  while((c = gzgetc(sf->gz_file)) != -1 && c != '+')
-  {
-    if(c != '\r' && c != '\n')
-    {
-      strbuf_append_char(sf->bases_buff, (char)c);
-      strbuf_gzreadline(sf->bases_buff, sf->gz_file);
-      strbuf_chomp(sf->bases_buff);
-    }
-
-    sf->line_number++;
-  }
-
-  if(c == -1)
-  {
-    fprintf(stderr, "seq_file.c: missing + in FASTQ [file: %s]\n", sf->path);
-  }
-
-  // Read to end of separator line
-  if(c != '\r' && c != '\n')
-  {
-    strbuf_gzskip_line(sf->gz_file);
-  }
-}
-
-char _seq_next_read_fastq(SeqFile *sf)
-{
-  if(sf->read_line_start)
-  {
-    // Read name
-    strbuf_gzreadline(sf->entry_name, sf->gz_file);
-    strbuf_chomp(sf->entry_name);
-    sf->line_number++;
-
-    // Read whole sequence
-    _seq_read_fastq_sequence(sf);
-
-    sf->read_line_start = 0;
-    return 1;
-  }
-  else
-  {
-    int c;
-
-    // Count bases not read in
-    sf->total_bases_skipped += (strbuf_len(sf->bases_buff) - sf->entry_offset);
-
-    // Skip over remaining quality values
-    while(sf->entry_offset_qual < strbuf_len(sf->bases_buff))
-    {
-      if((c = gzgetc(sf->gz_file)) == -1)
-        return 0;
-
-      if(c != '\r' && c != '\n')
-        sf->entry_offset_qual++;
-      else
-        sf->line_number++;
-    }
-
-    // Skip newlines
-    while((c = gzgetc(sf->gz_file)) != -1 && (c == '\n' || c == '\r'))
-      sf->line_number++;
-
-    if(c == -1)
-      return 0;
-
-    if(c != '@')
-    {
-      fprintf(stderr, "seq_file.c: FASTQ header does not begin with '@' [%c]\n",
-              c);
-      return 0;
-    }
-
-    // Read name
-    strbuf_gzreadline(sf->entry_name, sf->gz_file);
-    strbuf_chomp(sf->entry_name);
-    sf->line_number++;
-
-    // Read whole sequence
-    _seq_read_fastq_sequence(sf);
-
-    return 1;
-  }
-}
-
-char _seq_next_read_bam(SeqFile *sf)
-{
-  if(sf->entry_read)
-  {
-    // Count skipped bases
-    sf->total_bases_skipped += (unsigned long)sf->bam->core.l_qseq -
-                               sf->entry_offset;
-  }
-
-  if(samread(sf->sam_file, sf->bam) < 0)
-    return 0;
-
-  // Get name
-  strbuf_append_str(sf->entry_name, bam1_qname(sf->bam));
-
-  return 1;
-}
-
-char _seq_next_read_plain(SeqFile *sf)
-{
-  if(sf->read_line_start)
-  {
-    sf->read_line_start = 0;
-
-    int c;
-
-    while((c = gzgetc(sf->gz_file)) != -1 && c != '\r' && c != '\n')
-    {
-      sf->total_bases_skipped++;
-    }
-
-    if(c == -1)
-      return 0;
-    else
-      sf->line_number++;
-
-    return 1;
-  }
-  else
-  {
-    // Check if we can read a base
-    int c = gzgetc(sf->gz_file);
-
-    if(c == -1)
-    {
-      return 0;
-    }
-    else if(c == '\n' || c == '\r')
-    {
-      sf->line_number++;
-    }
-    else
-    {
-      sf->read_line_start = (char)c;
-    }
-
-    return 1;
-  }
-}
-
-// Returns 1 on success 0 if no more to read
-char seq_next_read(SeqFile *sf)
-{
-  strbuf_reset(sf->entry_name);
-
-  char success;
-
-  switch (sf->file_type)
-  {
-    case SEQ_FASTA:
-      success = _seq_next_read_fasta(sf);
-      break;
-    case SEQ_FASTQ:
-      success = _seq_next_read_fastq(sf);
-      break;
-    case SEQ_SAM:
-    case SEQ_BAM:
-      success = _seq_next_read_bam(sf);
-      break;
-    case SEQ_PLAIN:
-      success = _seq_next_read_plain(sf);
-      break;
-    default:
-      fprintf(stderr, "seq_file.c: Cannot read from unknown file type "
-                      "[file: %s]\n", sf->path);
-      return 0;
-  }
-
-  sf->entry_offset = 0;
-  sf->entry_offset_qual = 0;
-
-  if(success)
-  {
-    sf->entry_index++;
-    sf->entry_read = 1;
-    sf->entry_read_qual = seq_has_quality_scores(sf);
-  }
-  else
-  {
-    sf->entry_read = 0;
-    sf->entry_read_qual = 0;
-  }
-
-  return success;
-}
-
-
 // Get the name of the next read
 const char* seq_get_read_name(SeqFile *sf)
 {
@@ -857,98 +531,56 @@ unsigned long seq_get_length(SeqFile *sf)
 }
 
 
+
+// Returns 1 on success 0 if no more to read
+char seq_next_read(SeqFile *sf)
+{
+  strbuf_reset(sf->entry_name);
+
+  char success;
+
+  switch (sf->file_type)
+  {
+    case SEQ_FASTA:
+      success = seq_next_read_fasta(sf);
+      break;
+    case SEQ_FASTQ:
+      success = seq_next_read_fastq(sf);
+      break;
+    case SEQ_SAM:
+    case SEQ_BAM:
+      success = seq_next_read_sam(sf);
+      break;
+    case SEQ_PLAIN:
+      success = seq_next_read_plain(sf);
+      break;
+    default:
+      fprintf(stderr, "seq_file.c: Cannot read from unknown file type "
+                      "[file: %s]\n", sf->path);
+      return 0;
+  }
+
+  sf->entry_offset = 0;
+  sf->entry_offset_qual = 0;
+
+  if(success)
+  {
+    sf->entry_index++;
+    sf->entry_read = 1;
+    sf->entry_read_qual = seq_has_quality_scores(sf);
+  }
+  else
+  {
+    sf->entry_read = 0;
+    sf->entry_read_qual = 0;
+  }
+
+  return success;
+}
+
 /*
  Read a single base from a read
 */
-
-char _seq_read_base_fasta(SeqFile *sf, char *c)
-{
-  int next;
-  
-  while((next = gzgetc(sf->gz_file)) != -1 && (next == '\n' || next == '\r'))
-    sf->line_number++;
-
-  if(next == -1)
-  {
-    return 0;
-  }
-  else if(next == '>')
-  {
-    sf->read_line_start = 1;
-    return 0;
-  }
-  else
-  {
-    *c = (char)next;
-    return 1;
-  }
-}
-
-char _seq_read_base_fastq(SeqFile *sf, char *c)
-{
-  if(sf->entry_offset < strbuf_len(sf->bases_buff))
-  {
-    *c = strbuf_get_char(sf->bases_buff, sf->entry_offset);
-    return 1;
-  }
-  else
-  {
-    return 0;
-  }
-}
-
-char _seq_read_base_bam(SeqFile *sf, char *c)
-{
-  // Get reverse
-  char is_reversed = sf->bam->core.flag & 16;
-  unsigned long query_len = (unsigned long)sf->bam->core.l_qseq;
-
-  if(sf->entry_offset >= query_len)
-    return 0;
-
-  uint8_t *seq = bam1_seq(sf->bam);
-
-  if(is_reversed)
-  {
-    unsigned long index = query_len - sf->entry_offset - 1;
-    int8_t b = bam1_seqi(seq, index);
-    *c = bam_nt16_rev_table[seq_comp_table[b]];
-  }
-  else
-  {
-    int8_t b = bam1_seqi(seq, sf->entry_offset);
-    *c = bam_nt16_rev_table[b];
-  }
-
-  return 1;
-}
-
-char _seq_read_base_plain(SeqFile *sf, char *c)
-{
-  if(sf->read_line_start != 0)
-  {
-    *c = sf->read_line_start;
-    sf->read_line_start = 0;
-    return 1;
-  }
-
-  int next = gzgetc(sf->gz_file);
-
-  if(next == -1)
-  {
-    return 0;
-  }
-  else if(next == '\r' || next == '\n')
-  {
-    sf->line_number++;
-    return 0;
-  }
-  else
-  {
-    *c = (char)next;
-    return 1;
-  }
-}
 
 // Read a single base from the current read
 // Returns 1 on success, 0 if no more quality scores or run out of bases
@@ -963,17 +595,17 @@ char seq_read_base(SeqFile *sf, char *c)
   switch (sf->file_type)
   {
     case SEQ_FASTA:
-      success = _seq_read_base_fasta(sf, c);
+      success = seq_read_base_fasta(sf, c);
       break;
     case SEQ_FASTQ:
-      success = _seq_read_base_fastq(sf, c);
+      success = seq_read_base_fastq(sf, c);
       break;
     case SEQ_SAM:
     case SEQ_BAM:
-      success = _seq_read_base_bam(sf, c);
+      success = seq_read_base_sam(sf, c);
       break;
     case SEQ_PLAIN:
-      success = _seq_read_base_plain(sf, c);
+      success = seq_read_base_plain(sf, c);
       break;
     default:
       fprintf(stderr, "seq_file.c: Cannot read from unknown file type "
@@ -997,48 +629,6 @@ char seq_read_base(SeqFile *sf, char *c)
  Read a single quality score from a read
 */
 
-char _seq_read_qual_fastq(SeqFile *sf, char *c)
-{
-  if(sf->entry_offset_qual >= strbuf_len(sf->bases_buff))
-    return 0;
-
-  int next;
-
-  while((next = gzgetc(sf->gz_file)) != -1 && (next == '\n' || next == '\r'))
-    sf->line_number++;
-
-  if(next == -1)
-  {
-    fprintf(stderr, "seq_file.c: fastq file ended without finishing quality "
-                    "scores [file: %s]\n", sf->path);
-    return 0;
-  }
-
-  *c = (char)next;
-  return 1;
-}
-
-char _seq_read_qual_bam(SeqFile *sf, char *c)
-{
-  char is_reversed = sf->bam->core.flag & 16;
-  unsigned long query_len = (unsigned long)sf->bam->core.l_qseq;
-
-  if(sf->entry_offset_qual >= query_len)
-    return 0;
-
-  uint8_t *seq = bam1_qual(sf->bam);
-  unsigned long index;
-
-  if(is_reversed)
-    index = query_len - sf->entry_offset_qual - 1;
-  else
-    index = sf->entry_offset_qual;
-
-  *c = sf->fastq_ascii_offset + seq[index];
-
-  return 1;
-}
-
 // Read a single quality score from the current read
 // Returns 1 on success, 0 if no more quality scores or run out of bases
 char seq_read_qual(SeqFile *sf, char *c)
@@ -1052,11 +642,11 @@ char seq_read_qual(SeqFile *sf, char *c)
   switch (sf->file_type)
   {
     case SEQ_FASTQ:
-      success = _seq_read_qual_fastq(sf, c);
+      success = seq_read_qual_fastq(sf, c);
       break;
     case SEQ_SAM:
     case SEQ_BAM:
-      success = _seq_read_qual_bam(sf, c);
+      success = seq_read_qual_sam(sf, c);
       break;
     case SEQ_FASTA:
     case SEQ_PLAIN:
@@ -1133,82 +723,6 @@ char seq_read_k_quals(SeqFile *sf, char* str, int k)
  Read the rest of a read
 */
 
-char _seq_read_all_bases_bam(SeqFile *sf, StrBuf *sbuf)
-{
-  unsigned long qlen = (unsigned long)sf->bam->core.l_qseq;
-
-  if(sf->entry_offset >= qlen)
-    return 0;
-
-  // Get reverse
-  char is_reversed = sf->bam->core.flag & 16;
-
-  strbuf_ensure_capacity(sbuf, qlen - sf->entry_offset);
-
-  uint8_t *seq = bam1_seq(sf->bam);
-
-  // read in and reverse complement (if needed)
-  unsigned long i;
-  for(i = sf->entry_offset; i < qlen; i++)
-  {
-    unsigned long index = (is_reversed ? i : qlen - i - 1);
-    int8_t b = bam1_seqi(seq, index);
-    char c = bam_nt16_rev_table[is_reversed ? seq_comp_table[b] : b];
-    strbuf_append_char(sbuf, c);
-  }
-
-  return 1;
-}
-
-char _seq_read_all_bases_fasta(SeqFile *sf, StrBuf *sbuf)
-{
-  int c;
-
-  while((c = gzgetc(sf->gz_file)) != -1 && c != '>')
-  {
-    if(c != '\r' && c != '\n')
-    {
-      strbuf_append_char(sbuf, (char)c);
-      strbuf_gzreadline(sbuf, sf->gz_file);
-      strbuf_chomp(sbuf);
-    }
-
-    sf->line_number++;
-  }
-
-  if(c == '>')
-    sf->read_line_start = 1;
-
-  return 1;
-}
-
-char _seq_read_all_bases_fastq(SeqFile *sf, StrBuf *sbuf)
-{
-  // Copy from buffer
-  t_buf_pos len = sf->bases_buff->len - sf->entry_offset;
-  strbuf_copy(sbuf, 0, sf->bases_buff, sf->entry_offset, len);
-
-  return 1;
-}
-
-char _seq_read_all_bases_plain(SeqFile *sf, StrBuf *sbuf)
-{
-  t_buf_pos len = 0;
-
-  if(sf->read_line_start)
-  {
-    strbuf_append_char(sbuf, sf->read_line_start);
-    sf->read_line_start = 0;
-    len++;
-  }
-
-  len += strbuf_gzreadline(sbuf, sf->gz_file);
-  strbuf_chomp(sbuf);
-  sf->line_number++;
-
-  return (len > 0);
-}
-
 // returns 1 on success, 0 otherwise
 char seq_read_all_bases(SeqFile *sf, StrBuf *sbuf)
 {
@@ -1224,16 +738,16 @@ char seq_read_all_bases(SeqFile *sf, StrBuf *sbuf)
   {
     case SEQ_SAM:
     case SEQ_BAM:
-      success = _seq_read_all_bases_bam(sf, sbuf);
+      success = seq_read_all_bases_sam(sf, sbuf);
       break;
     case SEQ_FASTA:
-      success = _seq_read_all_bases_fasta(sf, sbuf);
+      success = seq_read_all_bases_fasta(sf, sbuf);
       break;
     case SEQ_FASTQ:
-      success = _seq_read_all_bases_fastq(sf, sbuf);
+      success = seq_read_all_bases_fastq(sf, sbuf);
       break;
     case SEQ_PLAIN:
-      success = _seq_read_all_bases_plain(sf, sbuf);
+      success = seq_read_all_bases_plain(sf, sbuf);
       break;
     default:
       fprintf(stderr, "seq_file.c: tried to read from unknown filetype "
@@ -1255,62 +769,6 @@ char seq_read_all_bases(SeqFile *sf, StrBuf *sbuf)
  Read the rest of a read's quality scores
 */
 
-char _seq_read_all_quals_bam(SeqFile *sf, StrBuf *sbuf)
-{
-  unsigned long qlen = (unsigned long)sf->bam->core.l_qseq;
-
-  if(sf->entry_offset_qual >= qlen)
-    return 0;
-
-  // Get reverse
-  char is_reversed = sf->bam->core.flag & 16;
-
-  strbuf_ensure_capacity(sbuf, qlen - sf->entry_offset);
-
-  uint8_t *seq = bam1_qual(sf->bam);
-
-  // read in and reverse complement (if needed)
-  unsigned long i;
-  for(i = sf->entry_offset; i < qlen; i++)
-  {
-    char c = sf->fastq_ascii_offset + seq[is_reversed ? i : qlen - i - 1];
-    strbuf_append_char(sbuf, c);
-  }
-
-  return 1;
-}
-
-char _seq_read_all_quals_fastq(SeqFile *sf, StrBuf *sbuf)
-{
-  if(sf->entry_offset_qual >= strbuf_len(sf->bases_buff))
-    return 0;
-
-  // Expect the same number of quality scores as bases
-  t_buf_pos expected_len = strbuf_len(sf->bases_buff) -
-                           sf->entry_offset_qual;
-
-  int next = -1;
-  t_buf_pos i;
-
-  for(i = 0; i < expected_len && (next = gzgetc(sf->gz_file)) != -1; i++)
-  {
-    if(next != '\r' && next != '\n')
-    {
-      strbuf_append_char(sbuf, (char)next);
-    }
-    else
-      sf->line_number++;
-  }
-
-  if(next == -1)
-  {
-    fprintf(stderr, "seq_file.c: fastq file ended without finishing quality "
-                    "scores (FASTQ) [file: %s]\n", sf->path);
-  }
-
-  return 1;
-}
-
 // returns 1 on success, 0 otherwise
 char seq_read_all_quals(SeqFile *sf, StrBuf *sbuf)
 {
@@ -1326,10 +784,10 @@ char seq_read_all_quals(SeqFile *sf, StrBuf *sbuf)
   {
     case SEQ_SAM:
     case SEQ_BAM:
-      success = _seq_read_all_quals_bam(sf, sbuf);
+      success = seq_read_all_quals_sam(sf, sbuf);
       break;
     case SEQ_FASTQ:
-      success = _seq_read_all_quals_fastq(sf, sbuf);
+      success = seq_read_all_quals_fastq(sf, sbuf);
       break;
   default:
       fprintf(stderr, "seq_file.c: tried to read from unknown filetype "
@@ -1349,65 +807,17 @@ char seq_read_all_quals(SeqFile *sf, StrBuf *sbuf)
  Each function returns the number of bytes written or 0 on failure
 */
 
-unsigned long _seq_file_write_name_fasta(SeqFile *sf, const char *name)
+size_t seq_file_write_name(SeqFile *sf, const char *name)
 {
   size_t num_bytes_printed = 0;
-
-  if(sf->write_state == WS_BEGIN)
-  {
-    num_bytes_printed += seq_puts(sf, ">");
-  }
-  else
-  {
-    num_bytes_printed += seq_puts(sf, "\n>");
-    sf->line_number++;
-  }
-
-  num_bytes_printed += seq_puts(sf, name);
-
-  return num_bytes_printed;
-}
-
-unsigned long _seq_file_write_name_fastq(SeqFile *sf, const char *name)
-{
-  unsigned long num_bytes_printed = 0;
-
-  if(sf->write_state == WS_BEGIN)
-  {
-    num_bytes_printed += seq_puts(sf, "@");
-  }
-  else if(sf->write_state == WS_NAME)
-  {
-    num_bytes_printed += seq_puts(sf, "\n\n+\n\n@");
-  }
-  else if(sf->write_state == WS_QUAL)
-  {
-    num_bytes_printed += seq_puts(sf, "\n@");
-    sf->line_number++;
-  }
-  else if(sf->write_state == WS_SEQ)
-  {
-    fprintf(stderr, "seq_file.c: writing in the wrong order (name) [path: %s]\n",
-            sf->path);
-    exit(EXIT_FAILURE);
-  }
-
-  num_bytes_printed += seq_puts(sf, name);
-
-  return num_bytes_printed;
-}
-
-unsigned long seq_file_write_name(SeqFile *sf, const char *name)
-{
-  unsigned long num_bytes_printed = 0;
 
   switch(sf->file_type)
   {
     case SEQ_FASTA:
-      num_bytes_printed = _seq_file_write_name_fasta(sf, name);
+      num_bytes_printed = seq_file_write_name_fasta(sf, name);
       break;
     case SEQ_FASTQ:
-      num_bytes_printed = _seq_file_write_name_fastq(sf, name);
+      num_bytes_printed = seq_file_write_name_fastq(sf, name);
       break;
     default:
       fprintf(stderr, "seq_file.c: called seq_file_write_name() with invalid "
@@ -1421,117 +831,9 @@ unsigned long seq_file_write_name(SeqFile *sf, const char *name)
 }
 
 
-
 /*
  Write sequence
 */
-
-#define _write(s,str,len) \
-((sf)->line_wrap == 0 ? seq_puts((sf), (str)) : _write_wrapped((sf),(str),(len)))
-
-size_t _write_wrapped(SeqFile *sf, const char *str, size_t str_len)
-{
-  size_t num_bytes_printed = 0;
-
-  if(sf->curr_line_length == sf->line_wrap)
-  {
-    sf->curr_line_length = 0;
-    num_bytes_printed += seq_puts(sf, "\n");
-    sf->line_number++;
-  }
-  
-  if(sf->curr_line_length + str_len <= sf->line_wrap)
-  {
-    // Doesn't go over a single line
-    sf->curr_line_length += str_len;
-    num_bytes_printed += seq_puts(sf, str);
-    return num_bytes_printed;
-  }
-
-  size_t bytes_to_print = sf->line_wrap - sf->curr_line_length;
-
-  num_bytes_printed += seq_write(sf, str, bytes_to_print);
-  num_bytes_printed += seq_puts(sf, "\n");
-  sf->line_number++;
-
-  size_t offset;
-
-  for(offset = bytes_to_print; offset < str_len; offset += sf->line_wrap)
-  {
-    bytes_to_print = MIN(str_len - offset, sf->line_wrap);
-    num_bytes_printed += (size_t)seq_write(sf, str + offset, bytes_to_print);
-
-    if(bytes_to_print < sf->line_wrap)
-    {
-      num_bytes_printed += seq_puts(sf, "\n");
-      sf->line_number++;
-    }
-  }
-
-  sf->curr_line_length = bytes_to_print;
-
-  return num_bytes_printed;
-}
-
-// Write FASTA sequence
-size_t _seq_file_write_seq_fasta(SeqFile *sf, const char *seq, size_t str_len)
-{
-  if(sf->write_state == WS_BEGIN)
-  {
-    fprintf(stderr, "seq_file.c: writing in the wrong order (seq) [path: %s]\n",
-            sf->path);
-    exit(EXIT_FAILURE);
-  }
-
-  size_t num_bytes_printed = 0;
-
-  if(sf->write_state == WS_NAME)
-  {
-    num_bytes_printed += seq_puts(sf, "\n");
-    sf->line_number++;
-  }
-
-  num_bytes_printed += _write(sf, seq, str_len);
-
-  return num_bytes_printed;
-}
-
-size_t _seq_file_write_seq_fastq(SeqFile *sf, const char *seq, size_t str_len)
-{
-  if(sf->write_state == WS_BEGIN || sf->write_state == WS_QUAL)
-  {
-    fprintf(stderr, "seq_file.c: writing in the wrong order (seq) [path: %s]\n",
-            sf->path);
-    exit(EXIT_FAILURE);
-  }
-
-  size_t num_bytes_printed = 0;
-
-  if(sf->write_state == WS_NAME)
-  {
-    num_bytes_printed += seq_puts(sf, "\n");
-    sf->line_number++;
-  }
-
-  num_bytes_printed += _write(sf, seq, str_len);
-
-  return num_bytes_printed;
-}
-
-size_t _seq_file_write_seq_plain(SeqFile *sf, const char *seq)
-{
-  size_t num_bytes_printed = 0;
-
-  if(sf->write_state != WS_BEGIN)
-  {
-    num_bytes_printed += seq_puts(sf, "\n");
-    sf->line_number++;
-  }
-
-  num_bytes_printed += seq_puts(sf, seq);
-
-  return num_bytes_printed;
-}
 
 size_t seq_file_write_seq(SeqFile *sf, const char *seq)
 {
@@ -1542,13 +844,13 @@ size_t seq_file_write_seq(SeqFile *sf, const char *seq)
   switch(sf->file_type)
   {
     case SEQ_FASTA:
-      num_bytes_printed = _seq_file_write_seq_fasta(sf, seq, str_len);
+      num_bytes_printed = seq_file_write_seq_fasta(sf, seq, str_len);
       break;
     case SEQ_FASTQ:
-      num_bytes_printed = _seq_file_write_seq_fastq(sf, seq, str_len);
+      num_bytes_printed = seq_file_write_seq_fastq(sf, seq, str_len);
       break;
     case SEQ_PLAIN:
-      num_bytes_printed = _seq_file_write_seq_plain(sf, seq);
+      num_bytes_printed = seq_file_write_seq_plain(sf, seq);
       break;
     default:
       fprintf(stderr, "seq_file.c: called seq_file_write_seq() with invalid "
@@ -1576,28 +878,5 @@ size_t seq_file_write_qual(SeqFile *sf, const char *qual)
     return 0;
   }
 
-  if(sf->write_state == WS_BEGIN || sf->write_state == WS_NAME)
-  {
-    fprintf(stderr, "seq_file.c: writing in the wrong order (qual) [path: %s]\n",
-            sf->path);
-    exit(EXIT_FAILURE);
-  }
-
-  size_t str_len = strlen(qual);
-
-  if(str_len == 0)
-    return 0;
-
-  size_t num_bytes_printed = 0;
-
-  if(sf->write_state == WS_SEQ)
-  {
-    num_bytes_printed += seq_puts(sf, "\n+\n");
-    sf->line_number += 2;
-  }
-
-  num_bytes_printed += _write(sf, qual, str_len);
-  sf->write_state = WS_QUAL;
-
-  return num_bytes_printed;
+  return seq_file_write_qual_fastq(sf, qual);
 }

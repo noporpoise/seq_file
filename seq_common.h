@@ -1,0 +1,99 @@
+
+#ifndef SEQ_COMMON_HEADER_SEEN
+#define SEQ_COMMON_HEADER_SEEN
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <zlib.h>
+
+#include "sam.h"
+
+#include "seq_file.h"
+
+// Printed nothing, then name, then some sequence, then some qualities
+// ... then ready to print a name again
+typedef enum WriteState
+  {WS_READ_ONLY, WS_BEGIN, WS_NAME, WS_SEQ, WS_QUAL} WriteState;
+
+struct SeqFile
+{
+  const char *path;
+
+  gzFile *gz_file; // for reading FASTA/FASTQ/plain
+  samfile_t *sam_file; // For reading SAM/BAM
+
+  // For reading sam/bams
+  bam1_t *bam;
+
+  char fastq_ascii_offset; // defaults to 33
+
+  enum SeqFileType file_type;
+
+  // have we seen a '>' at the start of a line in a fasta file?
+  // or a '@' in a fastq?
+  // For 'plain' format files this is used to store the first char per entry
+  char read_line_start;
+
+  // name, index and bases-read/offset of current entry
+  StrBuf *entry_name;
+  unsigned long entry_index;
+  
+  unsigned long entry_offset, entry_offset_qual;
+
+  // Whether an entry has been read in
+  char entry_read, entry_read_qual;
+
+  // Buffer for reading in bases in FASTQ files
+  StrBuf *bases_buff;
+
+  // Total bases read/written - initially 0
+  unsigned long total_bases_passed;
+  // Total bases skipped (not read through API) in file so far
+  unsigned long total_bases_skipped;
+
+  unsigned long line_number;
+
+  /* Writing preferences */
+
+  // Output plain file for writing if not gzipping output
+  // (newer zlib allows you to do this with gzFile, but mac version is outdated)
+  FILE *plain_file;
+
+  // 0 if no wrap, otherwise max bases per line
+  unsigned long line_wrap, curr_line_length;
+
+  // State of writing
+  WriteState write_state;
+};
+
+// Array for complementing bases read from BAM/SAM files
+int8_t seq_comp_table[16];
+
+// Write output MACROs
+// wrapper for fputs/gzputs
+#define seq_puts(f,str) (size_t) \
+((f)->plain_file != NULL ? (size_t)fputs((str), (f)->plain_file) \
+                         : (size_t)gzputs((f)->gz_file, (str)))
+
+// wrapper for fwrite/gzwrite
+#define seq_write(f,str,len) (size_t) \
+((f)->plain_file != NULL \
+  ? (size_t)fwrite((str), sizeof(char), (size_t)(len), (f)->plain_file) \
+  : (size_t)gzwrite((f)->gz_file, (str), (unsigned int)(len)))
+
+#define MIN(x,y) ((x) <= (y) ? (x) : (y))
+
+#define is_base_char(x) ((x) == 'a' || (x) == 'A' || \
+                         (x) == 'c' || (x) == 'C' || \
+                         (x) == 'g' || (x) == 'G' || \
+                         (x) == 't' || (x) == 'T' || \
+                         (x) == 'n' || (x) == 'N')
+
+
+#define _write(s,str,len) \
+((sf)->line_wrap == 0 ? seq_puts((sf), (str)) : _write_wrapped((sf),(str),(len)))
+
+size_t _write_wrapped(SeqFile *sf, const char *str, size_t str_len);
+
+#endif
