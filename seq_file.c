@@ -181,6 +181,13 @@ void _set_seq_filetype(SeqFile *sf)
     return;
   }
 
+  #ifdef ZLIB_VERNUM
+    #if (ZLIB_VERNUM >= 0x1240)
+      // Set buffer size to 1Mb
+      gzbuffer(sf->gz_file, (unsigned int)1024*1024);
+    #endif
+  #endif
+
   int first_char;
 
   // Move sf->line_number from 0 to 1 on first character
