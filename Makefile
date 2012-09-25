@@ -21,12 +21,6 @@ UNAME:=$(shell uname)
 
 CFLAGS := $(CFLAGS) -Wall -Wextra -I$(SAMTOOLS_PATH) -I$(STRING_BUF_PATH)
 
-ifeq ($(CC),gcc)
-  ifeq ($(UNAME), Darwin)
-    CFLAGS := $(CFLAGS) -fnested-functions
-  endif
-endif
-
 LIB_INCS := -L. -L$(SAMTOOLS_PATH) -L$(STRING_BUF_PATH)
 LIB_FLAGS := -lseqfile -lbam -lstrbuf -lz -lm
 
