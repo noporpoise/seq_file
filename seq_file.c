@@ -132,6 +132,8 @@ void seq_guess_filetype_from_path(const char *path, SeqFileType *file_type,
       return;
     }
   }
+
+  free(strcpy);
 }
 
 // Determines file type and opens necessary streams + mallocs memory
@@ -175,6 +177,7 @@ void _set_seq_filetype(SeqFile *sf)
 
   if(sf->gz_file == NULL)
   {
+    fprintf(stderr, "Error: Couldn't open gz_file [%s:%i]\n", __FILE__, __LINE__);
     return;
   }
 
@@ -221,7 +224,7 @@ void _set_seq_filetype(SeqFile *sf)
   }
   else
   {
-    fprintf(stderr, "seq_file.c warning: unknown filetype starting '%c'\n",
+    fprintf(stderr, "seq_file.c error: unknown filetype starting '%c'\n",
             first_char);
   }
 }
@@ -274,7 +277,7 @@ SeqFile* seq_file_open(const char* file_path)
 
   if(sf->file_type == SEQ_UNKNOWN)
   {
-    free(sf);
+    seq_file_close(sf);
     return NULL;
   }
   else
