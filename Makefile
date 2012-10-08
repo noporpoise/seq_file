@@ -36,7 +36,8 @@ all: clean $(OBJS)
 	$(CC) -o seq_file_test $(CFLAGS) $(LIB_INCS) seq_file_test.c $(LIB_FLAGS)
 
 clean:
-	rm -rf $(OBJS) libseqfile.a seq_convert seq_file_test seq_file.dSYM seq_file.greg
+	rm -rf $(OBJS) libseqfile.a seq_convert seq_file_test \
+	       seq_file.dSYM seq_file.greg seq_convert.dSYM seq_file_test.dSYM
 
 %.o : %.c %.h
 	$(CC) $(CFLAGS) -c $< -o $@

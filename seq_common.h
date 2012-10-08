@@ -102,6 +102,21 @@ int8_t seq_comp_table[16];
   ? (size_t)fwrite((str), sizeof(char), (size_t)(len), (f)->plain_file) \
   : (size_t)gzwrite((f)->gz_file, (str), (unsigned int)(len)))
 
+#define seq_getc(seq) ((seq)->plain_file != NULL ? fgetc((seq)->plain_file) \
+                                                 : gzgetc((seq)->gz_file))
+
+#define seq_ungetc(c,seq) ((seq)->plain_file != NULL \
+  ? ungetc((c),(seq)->plain_file) \
+  : gzungetc((c),(seq)->gz_file))
+
+#define seq_readline(sbuf,seq) ((seq)->plain_file != NULL \
+  ? strbuf_readline((sbuf), (seq)->plain_file) \
+  : strbuf_gzreadline((sbuf), (seq)->gz_file))
+
+#define seq_skip_line(seq) ((seq)->plain_file != NULL \
+  ? strbuf_skip_line((seq)->plain_file) \
+  : strbuf_gzskip_line((seq)->gz_file))
+
 #define MIN(x,y) ((x) <= (y) ? (x) : (y))
 
 #define is_base_char(x) ((x) == 'a' || (x) == 'A' || \

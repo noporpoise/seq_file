@@ -140,10 +140,11 @@ void seq_guess_filetype_from_path(const char *path, SeqFileType *file_type,
 void _set_seq_filetype(SeqFile *sf)
 {
   // Guess filetype from path
-  SeqFileType file_type;
-  char zipped;
+  SeqFileType file_type = SEQ_UNKNOWN;
+  char zipped = 0;
 
-  seq_guess_filetype_from_path(sf->path, &file_type, &zipped);
+  if(strcmp(sf->path,"-") != 0)
+    seq_guess_filetype_from_path(sf->path, &file_type, &zipped);
 
   if(file_type == SEQ_SAM)
   {
@@ -168,17 +169,18 @@ void _set_seq_filetype(SeqFile *sf)
   // Open file for the first time
   if(strcmp(sf->path, "-") == 0)
   {
-    sf->gz_file = gzdopen(fileno(stdin), "r");
+    //sf->gz_file = gzdopen(fileno(stdin), "r");
+    sf->plain_file = stdin;
   }
   else
   {
     sf->gz_file = gzopen(sf->path, "r");
-  }
-
-  if(sf->gz_file == NULL)
-  {
-    fprintf(stderr, "Error: Couldn't open gz_file [%s:%i]\n", __FILE__, __LINE__);
-    return;
+  
+    if(sf->gz_file == NULL)
+    {
+      fprintf(stderr, "Error: Couldn't open gz_file [%s:%i]\n", __FILE__, __LINE__);
+      return;
+    }
   }
 
   #ifdef ZLIB_VERNUM
@@ -195,7 +197,7 @@ void _set_seq_filetype(SeqFile *sf)
 
   do
   {
-    first_char = gzgetc(sf->gz_file);
+    first_char = seq_getc(sf);
     sf->line_number++;
   } while (first_char != -1 && (first_char == '\n' || first_char == '\r'));
 
@@ -223,9 +225,9 @@ void _set_seq_filetype(SeqFile *sf)
     sf->file_type = SEQ_PLAIN;
     sf->read_line_start = 0;
 
-    if(gzungetc(first_char, sf->gz_file) == -1)
+    if(seq_ungetc(first_char,sf) == -1)
     {
-      fprintf(stderr, "seq_file.c error: gzungetc failed\n");
+      fprintf(stderr, "seq_file.c error: ungetc failed\n");
       exit(EXIT_FAILURE);
     }
   }
@@ -277,6 +279,7 @@ SeqFile* _create_default_seq_file(const char* file_path)
   return sf;
 }
 
+// If file_path is '-', reads from stdin
 SeqFile* seq_file_open(const char* file_path)
 {
   SeqFile* sf = _create_default_seq_file(file_path);
@@ -421,7 +424,8 @@ size_t seq_file_close(SeqFile* sf)
     strbuf_free(sf->bases_buff);
   }
 
-  if(sf->plain_file != NULL)
+  // Only close the plain file if we are not reading from STDIN
+  if(sf->plain_file != NULL && strcmp(sf->path,"-") != 0)
   {
     fclose(sf->plain_file);
   }

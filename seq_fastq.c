@@ -27,12 +27,12 @@ void _seq_read_fastq_sequence(SeqFile *sf)
 
   int c;
 
-  while((c = gzgetc(sf->gz_file)) != -1 && c != '+')
+  while((c = seq_getc(sf)) != -1 && c != '+')
   {
     if(c != '\r' && c != '\n')
     {
       strbuf_append_char(sf->bases_buff, (char)c);
-      strbuf_gzreadline(sf->bases_buff, sf->gz_file);
+      seq_readline(sf->bases_buff, sf);
       strbuf_chomp(sf->bases_buff);
     }
 
@@ -47,7 +47,7 @@ void _seq_read_fastq_sequence(SeqFile *sf)
   // Read to end of separator line
   if(c != '\r' && c != '\n')
   {
-    strbuf_gzskip_line(sf->gz_file);
+    seq_skip_line(sf);
   }
 }
 
@@ -56,7 +56,7 @@ char seq_next_read_fastq(SeqFile *sf)
   if(sf->read_line_start)
   {
     // Read name
-    strbuf_gzreadline(sf->entry_name, sf->gz_file);
+    seq_readline(sf->entry_name, sf);
     strbuf_chomp(sf->entry_name);
     sf->line_number++;
 
@@ -76,7 +76,7 @@ char seq_next_read_fastq(SeqFile *sf)
     // Skip over remaining quality values
     while(sf->entry_offset_qual < strbuf_len(sf->bases_buff))
     {
-      if((c = gzgetc(sf->gz_file)) == -1)
+      if((c = seq_getc(sf)) == -1)
         return 0;
 
       if(c != '\r' && c != '\n')
@@ -86,7 +86,7 @@ char seq_next_read_fastq(SeqFile *sf)
     }
 
     // Skip newlines
-    while((c = gzgetc(sf->gz_file)) != -1 && (c == '\n' || c == '\r'))
+    while((c = seq_getc(sf)) != -1 && (c == '\n' || c == '\r'))
       sf->line_number++;
 
     if(c == -1)
@@ -100,7 +100,7 @@ char seq_next_read_fastq(SeqFile *sf)
     }
 
     // Read name
-    strbuf_gzreadline(sf->entry_name, sf->gz_file);
+    seq_readline(sf->entry_name, sf);
     strbuf_chomp(sf->entry_name);
     sf->line_number++;
 
@@ -131,7 +131,7 @@ char seq_read_qual_fastq(SeqFile *sf, char *c)
 
   int next;
 
-  while((next = gzgetc(sf->gz_file)) != -1 && (next == '\n' || next == '\r'))
+  while((next = seq_getc(sf)) != -1 && (next == '\n' || next == '\r'))
     sf->line_number++;
 
   if(next == -1)
@@ -166,7 +166,7 @@ char seq_read_all_quals_fastq(SeqFile *sf, StrBuf *sbuf)
   int next = -1;
   t_buf_pos i;
 
-  for(i = 0; i < expected_len && (next = gzgetc(sf->gz_file)) != -1; i++)
+  for(i = 0; i < expected_len && (next = seq_getc(sf)) != -1; i++)
   {
     if(next != '\r' && next != '\n')
     {

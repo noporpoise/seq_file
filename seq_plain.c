@@ -29,7 +29,7 @@ char seq_next_read_plain(SeqFile *sf)
 
     int c;
 
-    while((c = gzgetc(sf->gz_file)) != -1 && c != '\r' && c != '\n')
+    while((c = seq_getc(sf)) != -1 && c != '\r' && c != '\n')
     {
       sf->total_bases_skipped++;
     }
@@ -44,7 +44,7 @@ char seq_next_read_plain(SeqFile *sf)
   else
   {
     // Check if we can read a base
-    int c = gzgetc(sf->gz_file);
+    int c = seq_getc(sf);
 
     if(c == -1)
     {
@@ -72,7 +72,7 @@ char seq_read_base_plain(SeqFile *sf, char *c)
     return 1;
   }
 
-  int next = gzgetc(sf->gz_file);
+  int next = seq_getc(sf);
 
   if(next == -1)
   {
@@ -101,7 +101,7 @@ char seq_read_all_bases_plain(SeqFile *sf, StrBuf *sbuf)
     len++;
   }
 
-  len += strbuf_gzreadline(sbuf, sf->gz_file);
+  len += seq_readline(sbuf, sf);
   strbuf_chomp(sbuf);
   sf->line_number++;
 
