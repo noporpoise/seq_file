@@ -21,91 +21,73 @@
 
 #include "seq_plain.h"
 
+/*
+states
+base -- user
+1        0
+0        0
+
+*/
+
 char seq_next_read_plain(SeqFile *sf)
 {
-  if(sf->read_line_start)
+  int c;
+
+  if(!sf->read_line_start)
   {
-    sf->read_line_start = 0;
-
-    int c;
-
-    while((c = seq_getc(sf)) != -1 && c != '\r' && c != '\n')
+    // Skip the rest of line
+    while((c = seq_getc(sf)) != -1 && c != '\n' && c != '\r')
     {
       sf->total_bases_skipped++;
     }
 
-    if(c == -1)
-      return 0;
-    else
-      sf->line_number++;
-
-    return 1;
+    sf->read_line_start = 1;
   }
-  else
+
+  // check we can get another base
+  if((c = seq_getc(sf)) == -1)
   {
-    // Check if we can read a base
-    int c = seq_getc(sf);
-
-    if(c == -1)
-    {
-      return 0;
-    }
-    else if(c == '\n' || c == '\r')
-    {
-      sf->line_number++;
-    }
-    else
-    {
-      sf->read_line_start = (char)c;
-    }
-
-    return 1;
+    return 0;
   }
+
+  seq_ungetc(c, sf);
+
+  return 1;
 }
 
-char seq_read_base_plain(SeqFile *sf, char *c)
+char seq_read_base_plain(SeqFile *sf, char *cc)
 {
-  if(sf->read_line_start != 0)
-  {
-    *c = sf->read_line_start;
-    sf->read_line_start = 0;
-    return 1;
-  }
+  int c = seq_getc(sf);
 
-  int next = seq_getc(sf);
-
-  if(next == -1)
+  if(c == -1)
   {
     return 0;
   }
-  else if(next == '\r' || next == '\n')
+  else if(c == '\r' || c == '\n')
   {
     sf->line_number++;
+    sf->read_line_start = 1;
     return 0;
   }
   else
   {
-    *c = (char)next;
+    *cc = (char)c;
     return 1;
   }
 }
 
 char seq_read_all_bases_plain(SeqFile *sf, StrBuf *sbuf)
 {
-  t_buf_pos len = 0;
+  seq_readline(sbuf, sf);
 
-  if(sf->read_line_start)
+  // chomp returns the number of charactes removed
+  if(strbuf_chomp(sbuf) > 0)
   {
-    strbuf_append_char(sbuf, sf->read_line_start);
-    sf->read_line_start = 0;
-    len++;
+    sf->read_line_start = 1;
+    sf->line_number++;
   }
 
-  len += seq_readline(sbuf, sf);
-  strbuf_chomp(sbuf);
-  sf->line_number++;
-
-  return (len > 0);
+  return 1;
 }
 
 size_t seq_file_write_seq_plain(SeqFile *sf, const char *seq)

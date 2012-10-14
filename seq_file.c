@@ -195,11 +195,11 @@ void _set_seq_filetype(SeqFile *sf)
   // Move sf->line_number from 0 to 1 on first character
   // Then for each newline, line_number++
 
-  do
-  {
+  //do
+  //{
     first_char = seq_getc(sf);
     sf->line_number++;
-  } while (first_char != -1 && (first_char == '\n' || first_char == '\r'));
+  //} while (first_char != -1 && (first_char == '\n' || first_char == '\r'));
 
   if(first_char == -1)
   {
@@ -219,11 +219,16 @@ void _set_seq_filetype(SeqFile *sf)
     sf->read_line_start = 1;
     sf->bases_buff = strbuf_new();
   }
-  else if(is_base_char(first_char))
+  else
   {
+    if(!is_base_char(first_char) && first_char != '\n' && first_char != '\r')
+    {
+      fprintf(stderr, "seq_file.c warning: plain file starts with non-ACGTN base\n");
+    }
+
     // Plain file
     sf->file_type = SEQ_PLAIN;
-    sf->read_line_start = 0;
+    sf->read_line_start = 1;
 
     if(seq_ungetc(first_char,sf) == -1)
     {
@@ -231,11 +236,11 @@ void _set_seq_filetype(SeqFile *sf)
       exit(EXIT_FAILURE);
     }
   }
-  else
+  /*else
   {
     fprintf(stderr, "seq_file.c error: unknown filetype starting '%c'\n",
             first_char);
-  }
+  }*/
 }
 
 SeqFile* _create_default_seq_file(const char* file_path)
@@ -711,6 +716,7 @@ char seq_read_k_bases(SeqFile *sf, char* str, int k)
   return 1;
 }
 
+// Return 1 if we read `k` bases.  Return 0 if we read < k bases
 char seq_read_k_quals(SeqFile *sf, char* str, int k)
 {
   // Check if we have read anything in
