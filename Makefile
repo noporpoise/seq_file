@@ -16,16 +16,19 @@ ifndef SAMTOOLS_PATH
 	SAMTOOLS_PATH=$(HOME)/bioinf/samtools-0.1.18
 endif
 
+LIB_STRING_BUF=$(STRING_BUF_PATH)/libstrbuf.a
+LIB_SAMTOOLS=$(SAMTOOLS_PATH)/libbam.a
+
 # Check mac/linux
 UNAME:=$(shell uname)
 
 CFLAGS := $(CFLAGS) -Wall -Wextra -I$(SAMTOOLS_PATH) -I$(STRING_BUF_PATH)
 
-LIB_INCS := -L. -L$(SAMTOOLS_PATH) -L$(STRING_BUF_PATH)
-LIB_FLAGS := -lseqfile -lbam -lstrbuf -lz -lm
+LIB_INCS := -L .
+LIB_FLAGS := $(LIB_STRING_BUF) $(LIB_SAMTOOLS) -lseqfile -lz -lm
 
 ifdef ZLIB_PATH
-	LIB_INCS := $(LIB_INCS) -L$(ZLIB_PATH)
+	LIB_INCS := $(LIB_INCS) -L $(ZLIB_PATH)
 endif
 
 OBJS = seq_file.o seq_common.o seq_fasta.o seq_fastq.o seq_plain.o seq_sam.o

@@ -21,14 +21,6 @@
 
 #include "seq_plain.h"
 
-/*
-states
-base -- user
-1        0
-0        0
-
-*/
-
 char seq_next_read_plain(SeqFile *sf)
 {
   int c;
