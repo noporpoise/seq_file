@@ -19,13 +19,9 @@ endif
 LIB_STRING_BUF=$(STRING_BUF_PATH)/libstrbuf.a
 LIB_SAMTOOLS=$(SAMTOOLS_PATH)/libbam.a
 
-# Check mac/linux
-UNAME:=$(shell uname)
+CFLAGS := $(CFLAGS) -Wall -Wextra -I $(SAMTOOLS_PATH) -I $(STRING_BUF_PATH)
 
-CFLAGS := $(CFLAGS) -Wall -Wextra -I$(SAMTOOLS_PATH) -I$(STRING_BUF_PATH)
-
-LIB_INCS := -L .
-LIB_FLAGS := $(LIB_STRING_BUF) $(LIB_SAMTOOLS) -lseqfile -lz -lm
+LIB_FLAGS := $(LIB_STRING_BUF) $(LIB_SAMTOOLS) -lz -lm
 
 ifdef ZLIB_PATH
 	LIB_INCS := $(LIB_INCS) -L $(ZLIB_PATH)
@@ -35,8 +31,8 @@ OBJS = seq_file.o seq_common.o seq_fasta.o seq_fastq.o seq_plain.o seq_sam.o
 
 all: clean $(OBJS)
 	ar -csru libseqfile.a $(OBJS)
-	$(CC) -o seq_convert $(CFLAGS) $(LIB_INCS) seq_convert.c $(LIB_FLAGS)
-	$(CC) -o seq_file_test $(CFLAGS) $(LIB_INCS) seq_file_test.c $(LIB_FLAGS)
+	$(CC) -o seq_convert $(CFLAGS) seq_convert.c libseqfile.a $(LIB_FLAGS)
+	$(CC) -o seq_file_test $(CFLAGS) seq_file_test.c libseqfile.a $(LIB_FLAGS)
 
 clean:
 	rm -rf $(OBJS) libseqfile.a seq_convert seq_file_test \
