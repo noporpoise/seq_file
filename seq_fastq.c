@@ -49,6 +49,7 @@ void _seq_read_fastq_sequence(SeqFile *sf)
   if(c != '\r' && c != '\n')
   {
     seq_skip_line(sf);
+    sf->line_number++;
   }
 }
 
