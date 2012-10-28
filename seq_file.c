@@ -178,7 +178,8 @@ void _set_seq_filetype(SeqFile *sf)
   
     if(sf->gz_file == NULL)
     {
-      fprintf(stderr, "Error: Couldn't open gz_file [%s:%i]\n", __FILE__, __LINE__);
+      fprintf(stderr, "%s:%i: Error -- couldn't open gz_file\n",
+              __FILE__, __LINE__);
       return;
     }
   }
@@ -203,7 +204,7 @@ void _set_seq_filetype(SeqFile *sf)
 
   if(first_char == -1)
   {
-    fprintf(stderr, "seq_file.c warning: empty sequence file\n");
+    fprintf(stderr, "%s:%i: Warning -- empty sequence file\n", __FILE__, __LINE__);
     return;
   }
   else if(first_char == '>')
@@ -223,7 +224,8 @@ void _set_seq_filetype(SeqFile *sf)
   {
     if(!is_base_char(first_char) && first_char != '\n' && first_char != '\r')
     {
-      fprintf(stderr, "seq_file.c warning: plain file starts with non-ACGTN base\n");
+      fprintf(stderr, "%s:%i: Warning -- plain file starts with non-ACGTN base\n",
+              __FILE__, __LINE__);
     }
 
     // Plain file
@@ -232,14 +234,16 @@ void _set_seq_filetype(SeqFile *sf)
 
     if(seq_ungetc(first_char,sf) == -1)
     {
-      fprintf(stderr, "seq_file.c error: ungetc failed\n");
+      fprintf(stderr, "%s:%i: Error -- ungetc failed\n", __FILE__, __LINE__);
       exit(EXIT_FAILURE);
     }
   }
   /*else
   {
-    fprintf(stderr, "seq_file.c error: unknown filetype starting '%c'\n",
-            first_char);
+    fprintf(stderr, "%s:%i: unknown filetype starting '%c' "
+                    "[path: %s; line: %lu; type: %s]\n",
+            __FILE__, __LINE__, first_char, sf->path, sf->line_number,
+            seq_file_type_str(sf->file_type, 0));
   }*/
 }
 
@@ -335,8 +339,8 @@ SeqFile* seq_file_open_filetype(const char* file_path,
       }
       break;
     default:
-      fprintf(stderr, "seq_file.c warning: invalid SeqFileType in "
-                      "function seq_file_open_filetype()\n");
+      fprintf(stderr, "%s:%i: Warning -- invalid SeqFileType in "
+                      "function seq_file_open_filetype()\n", __FILE__, __LINE__);
       free(sf);
       return NULL;
   }
@@ -353,18 +357,21 @@ SeqFile* seq_file_open_write(const char* file_path, SeqFileType file_type,
 {
   if(file_type == SEQ_SAM || file_type == SEQ_BAM)
   {
-    fprintf(stderr, "seq_file.c error: cannot write to a SAM or BAM file\n");
+    fprintf(stderr, "%s:%i: Error -- cannot write to a SAM or BAM file\n",
+            __FILE__, __LINE__);
     return NULL;
   }
   else if(file_type == SEQ_UNKNOWN)
   {
-    fprintf(stderr, "seq_file.c error: cannot open file type SEQ_UNKNOWN\n");
+    fprintf(stderr, "%s:%i: Error -- cannot open file type SEQ_UNKNOWN\n",
+            __FILE__, __LINE__);
     return NULL;
   }
   else if(file_type == SEQ_PLAIN && line_wrap != 0)
   {
-    fprintf(stderr, "seq_file.c warning: cannot set line wrap with 'plain' "
-                    "sequence format\n");
+    fprintf(stderr, "%s:%i: Warning -- cannot set line wrap with 'plain' "
+                    "sequence format\n",
+            __FILE__, __LINE__);
     line_wrap = 0;
   }
 
@@ -505,7 +512,10 @@ char seq_has_quality_scores(const SeqFile *sf)
     case SEQ_PLAIN:
       return 0;
     default:
-      fprintf(stderr, "seq_file.c: unknown file type [path: %s]\n", sf->path);
+      fprintf(stderr, "%s:%i: Tried to read from unknown filetype "
+                      "[path: %s; line: %lu; type: %s]\n",
+              __FILE__, __LINE__, sf->path, sf->line_number,
+              seq_file_type_str(sf->file_type, 0));
       return 0;
   }
 }
@@ -542,8 +552,9 @@ unsigned long seq_get_length(SeqFile *sf)
 {
   if(sf->entry_read)
   {
-    fprintf(stderr, "seq_file.c: haven't finished reading sequence - "
-                    "seq_get_length() cannot return a length\n");
+    fprintf(stderr, "%s:%i: Haven't finished reading sequence - seq_get_length() "
+                    "cannot return a length [file: %s; line: %lu]\n",
+            __FILE__, __LINE__, sf->path, sf->line_number);
     return 0;
   }
 
@@ -575,8 +586,10 @@ char seq_next_read(SeqFile *sf)
       success = seq_next_read_plain(sf);
       break;
     default:
-      fprintf(stderr, "seq_file.c: Cannot read from unknown file type "
-                      "[file: %s]\n", sf->path);
+      fprintf(stderr, "%s:%i: Tried to read from unknown filetype "
+                      "[path: %s; line: %lu; type: %s]\n",
+              __FILE__, __LINE__, sf->path, sf->line_number,
+              seq_file_type_str(sf->file_type, 0));
       return 0;
   }
 
@@ -628,8 +641,10 @@ char seq_read_base(SeqFile *sf, char *c)
       success = seq_read_base_plain(sf, c);
       break;
     default:
-      fprintf(stderr, "seq_file.c: Cannot read from unknown file type "
-                      "[file: %s]\n", sf->path);
+      fprintf(stderr, "%s:%i: Tried to read from unknown filetype "
+                      "[path: %s; line: %lu; type: %s]\n",
+              __FILE__, __LINE__, sf->path, sf->line_number,
+              seq_file_type_str(sf->file_type, 0));
       return 0;
   }
 
@@ -670,13 +685,16 @@ char seq_read_qual(SeqFile *sf, char *c)
       break;
     case SEQ_FASTA:
     case SEQ_PLAIN:
-      fprintf(stderr, "seq_file.c: Cannot read from file type without quality "
-                      "scores [file: %s; type: %s]\n", sf->path,
-                      seq_file_type_str(sf->file_type, 0));
+      fprintf(stderr, "%s:%i: Cannot read from file type without quality scores "
+                      "[file: %s; line: %lu; type: %s]\n",
+              __FILE__, __LINE__, sf->path, sf->line_number,
+              seq_file_type_str(sf->file_type, 0));
       return 0;
     default:
-      fprintf(stderr, "seq_file.c: Cannot read from unknown file type "
-                      "[file: %s]\n", sf->path);
+      fprintf(stderr, "%s:%i: Tried to read from unknown filetype "
+                      "[path: %s; line: %lu; type: %s]\n",
+              __FILE__, __LINE__, sf->path, sf->line_number,
+              seq_file_type_str(sf->file_type, 0));
       return 0;
   }
 
@@ -771,8 +789,10 @@ char seq_read_all_bases(SeqFile *sf, StrBuf *sbuf)
       success = seq_read_all_bases_plain(sf, sbuf);
       break;
     default:
-      fprintf(stderr, "seq_file.c: tried to read from unknown filetype "
-                      "[path: %s]\n", sf->path);
+      fprintf(stderr, "%s:%i: Tried to read from unknown filetype "
+                      "[path: %s; line: %lu; type: %s]\n",
+              __FILE__, __LINE__, sf->path, sf->line_number,
+              seq_file_type_str(sf->file_type, 0));
       return 0;
   }
 
@@ -811,8 +831,10 @@ char seq_read_all_quals(SeqFile *sf, StrBuf *sbuf)
       success = seq_read_all_quals_fastq(sf, sbuf);
       break;
   default:
-      fprintf(stderr, "seq_file.c: tried to read from unknown filetype "
-                      "[path: %s]\n", sf->path);
+      fprintf(stderr, "%s:%i: Tried to read from unknown filetype "
+                      "[path: %s; line: %lu; type: %s]\n",
+              __FILE__, __LINE__, sf->path, sf->line_number,
+              seq_file_type_str(sf->file_type, 0));
       return 0;
   }
 
@@ -841,9 +863,10 @@ size_t seq_file_write_name(SeqFile *sf, const char *name)
       num_bytes_printed = seq_file_write_name_fastq(sf, name);
       break;
     default:
-      fprintf(stderr, "seq_file.c: called seq_file_write_name() with invalid "
-                      "file type (%s) [path: %s]\n", seq_file_get_type_str(sf),
-                      sf->path);
+      fprintf(stderr, "%s:%i: Called seq_file_write_name() with invalid file "
+                      "type [path: %s; line: %lu; type: %s]\n",
+              __FILE__, __LINE__,
+              sf->path, sf->line_number, seq_file_get_type_str(sf));
       return 0;
   }
 
@@ -874,9 +897,10 @@ size_t seq_file_write_seq(SeqFile *sf, const char *seq)
       num_bytes_printed = seq_file_write_seq_plain(sf, seq);
       break;
     default:
-      fprintf(stderr, "seq_file.c: called seq_file_write_seq() with invalid "
-                      "file type (%s) [path: %s]\n", seq_file_get_type_str(sf),
-                      sf->path);
+      fprintf(stderr, "%s:%i: Called seq_file_write_seq() with invalid file "
+                      "type [path: %s; line: %lu; type: %s]\n",
+              __FILE__, __LINE__,
+              sf->path, sf->line_number, seq_file_get_type_str(sf));
       return 0;
   }
 
@@ -893,9 +917,10 @@ size_t seq_file_write_qual(SeqFile *sf, const char *qual)
 {
   if(sf->file_type != SEQ_FASTQ)
   {
-    fprintf(stderr, "seq_file.c: called seq_file_write_qual() with invalid "
-                    "file type (%s) [path: %s]\n", seq_file_get_type_str(sf),
-                    sf->path);
+    fprintf(stderr, "%s:%i: Called seq_file_write_qual() with invalid file "
+                    "type [path: %s; line: %lu; type: %s]\n",
+            __FILE__, __LINE__,
+            sf->path, sf->line_number, seq_file_get_type_str(sf));
     return 0;
   }
 

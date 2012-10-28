@@ -146,8 +146,8 @@ size_t seq_file_write_seq_fasta(SeqFile *sf, const char *seq, size_t str_len)
 {
   if(sf->write_state == WS_BEGIN)
   {
-    fprintf(stderr, "seq_file.c: writing in the wrong order (seq) [path: %s]\n",
-            sf->path);
+    fprintf(stderr, "%s:%i: writing in the wrong order (seq) [path: %s]\n",
+            __FILE__, __LINE__, sf->path);
     exit(EXIT_FAILURE);
   }
 

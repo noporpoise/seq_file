@@ -52,7 +52,8 @@ void test_read_all_bases(char *file_path)
 
   if(sf == NULL)
   {
-    fprintf(stderr, "test_read_all_bases: couldn't open file %s\n", file_path);
+    fprintf(stderr, "%s:%i: Couldn't open file: %s\n",
+            __FILE__, __LINE__, file_path);
     return;
   }
 
@@ -75,7 +76,8 @@ void test_read_names(char *file_path)
 
   if(sf == NULL)
   {
-    fprintf(stderr, "test_read_names: couldn't open file %s\n", file_path);
+    fprintf(stderr, "%s:%i: Couldn't open file %s\n",
+            __FILE__, __LINE__, file_path);
     return;
   }
 
@@ -94,7 +96,8 @@ void test_get_type(char* file_path)
 
   if(file == NULL)
   {
-    fprintf(stderr, "seq_file_test: Cannot open file %s\n", file_path);
+    fprintf(stderr, "%s:%i: Cannot open file: %s\n",
+            __FILE__, __LINE__, file_path);
     return;
   }
 

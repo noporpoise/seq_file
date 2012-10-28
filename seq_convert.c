@@ -67,8 +67,8 @@ int main(int argc, char** argv)
 
   if(out_file_type == SEQ_UNKNOWN)
   {
-    fprintf(stderr, "Sorry, I cannot identify the output file's format "
-                    "from its path\n");
+    fprintf(stderr, "%s:%i: Sorry, I cannot identify the output file's format "
+                    "from its path [file: %s]\n", __FILE__, __LINE__, out_path);
     exit(EXIT_FAILURE);
   }
 
@@ -78,13 +78,15 @@ int main(int argc, char** argv)
 
   if(in_file == NULL)
   {
-    fprintf(stderr, "Couldn't open input file: %s\n", in_path);
+    fprintf(stderr, "%s:%i: Couldn't open input file: %s\n",
+            __FILE__, __LINE__, in_path);
     exit(EXIT_FAILURE);
   }
 
   if(out_file == NULL)
   {
-    fprintf(stderr, "Couldn't open output file: %s\n", out_path);
+    fprintf(stderr, "%s:%i: Couldn't open output file: %s\n",
+            __FILE__, __LINE__, out_path);
     exit(EXIT_FAILURE);
   }
 
@@ -124,7 +126,11 @@ int main(int argc, char** argv)
 
         if(!(bytes_written += seq_file_write_seq(out_file, c)))
         {
-          fprintf(stderr, "Couldn't write base to file\n");
+          fprintf(stderr, "%s:%i: Couldn't write base to file "
+                          "[file: %s; line: %lu]\n",
+                  __FILE__, __LINE__,
+                  seq_get_path(out_file), seq_curr_line_number(in_file));
+
           exit(EXIT_FAILURE);
         }
       }
@@ -137,7 +143,11 @@ int main(int argc, char** argv)
         {
           if(!(bytes_written += seq_file_write_qual(out_file, c)))
           {
-            fprintf(stderr, "Couldn't write quality score to file\n");
+            fprintf(stderr, "%s:%i: Couldn't write quality score to file "
+                            "[file: %s; line: %lu]\n",
+                    __FILE__, __LINE__, seq_get_path(out_file),
+                    seq_curr_line_number(in_file));
+
             exit(EXIT_FAILURE);
           }
         }
