@@ -82,7 +82,8 @@ char seq_next_read(SeqFile *sf);
 // Get the name of the next read
 const char* seq_get_read_name(SeqFile *sf);
 
-// Get this read index -- starts from 0
+// Get this read index -- 0 if no reads read yet,
+// otherwise read number of prev read entry
 unsigned long seq_get_read_index(SeqFile *sf);
 
 // Get the distance into this read that we have read

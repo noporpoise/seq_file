@@ -96,3 +96,17 @@ size_t seq_file_write_seq_plain(SeqFile *sf, const char *seq)
 
   return num_bytes_printed;
 }
+
+size_t seq_file_close_write_plain(SeqFile *sf)
+{
+  size_t num_bytes_printed = 0;
+
+  if(sf->write_state == WS_SEQ)
+  {
+    num_bytes_printed += seq_puts(sf, "\n");
+    sf->line_number++;
+  }
+
+  return num_bytes_printed;
+}
+

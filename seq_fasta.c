@@ -163,3 +163,16 @@ size_t seq_file_write_seq_fasta(SeqFile *sf, const char *seq, size_t str_len)
 
   return num_bytes_printed;
 }
+
+size_t seq_file_close_write_fasta(SeqFile *sf)
+{
+  size_t num_bytes_printed = 0;
+
+  if(sf->write_state == WS_NAME || sf->write_state == WS_SEQ)
+  {
+    num_bytes_printed += seq_puts(sf, "\n");
+    sf->line_number++;
+  }
+
+  return num_bytes_printed;
+}

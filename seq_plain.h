@@ -30,4 +30,6 @@ char seq_read_all_bases_plain(SeqFile *sf, StrBuf *sbuf);
 
 size_t seq_file_write_seq_plain(SeqFile *sf, const char *seq);
 
+size_t seq_file_close_write_plain(SeqFile *sf);
+
 #endif

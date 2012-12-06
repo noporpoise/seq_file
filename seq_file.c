@@ -196,14 +196,14 @@ void _set_seq_filetype(SeqFile *sf)
   // Move sf->line_number from 0 to 1 on first character
   // Then for each newline, line_number++
 
-  //do
-  //{
-    first_char = seq_getc(sf);
+  if((first_char = seq_getc(sf)) != -1)
+  {
     sf->line_number++;
-  //} while (first_char != -1 && (first_char == '\n' || first_char == '\r'));
+  }
 
   if(first_char == -1)
   {
+    sf->file_type = SEQ_PLAIN;
     fprintf(stderr, "%s:%i: Warning -- empty sequence file\n", __FILE__, __LINE__);
     return;
   }
@@ -416,8 +416,23 @@ size_t seq_file_close(SeqFile* sf)
   // Add a new line to the end of output files
   if(sf->write_state != WS_READ_ONLY)
   {
-    num_bytes_printed = seq_puts(sf, "\n");
-    sf->line_number++;
+    switch(sf->file_type)
+    {
+      case SEQ_FASTA:
+        seq_file_close_write_fasta(sf);
+        break;
+      case SEQ_FASTQ:
+        seq_file_close_write_fastq(sf);
+        break;
+      case SEQ_PLAIN:
+        seq_file_close_write_plain(sf);
+        break;
+      case SEQ_SAM:
+      case SEQ_BAM:
+      default:
+        fprintf(stderr, "%s:%i: Warning -- invalid SeqFileType in "
+                        "function seq_file_close()\n", __FILE__, __LINE__);
+    }
   }
 
   if(sf->gz_file != NULL)
@@ -532,7 +547,8 @@ const char* seq_get_read_name(SeqFile *sf)
   return sf->entry_name->buff;
 }
 
-// Get this read index -- starts from 0
+// Get this read index -- 0 if no reads read yet,
+// otherwise read number of prev read entry
 unsigned long seq_get_read_index(SeqFile *sf)
 {
   return sf->entry_index;
@@ -871,6 +887,8 @@ size_t seq_file_write_name(SeqFile *sf, const char *name)
   }
 
   sf->write_state = WS_NAME;
+  sf->entry_index++;
+
   return num_bytes_printed;
 }
 
@@ -907,6 +925,11 @@ size_t seq_file_write_seq(SeqFile *sf, const char *seq)
   sf->total_bases_passed += str_len;
 
   sf->write_state = WS_SEQ;
+
+  if(sf->file_type == SEQ_PLAIN)
+  {
+    sf->entry_index++;
+  }
 
   return num_bytes_printed;
 }

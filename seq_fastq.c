@@ -269,3 +269,26 @@ size_t seq_file_write_qual_fastq(SeqFile *sf, const char *qual)
 
   return num_bytes_printed;
 }
+
+size_t seq_file_close_write_fastq(SeqFile *sf)
+{
+  size_t num_bytes_printed = 0;
+
+  if(sf->write_state == WS_NAME)
+  {
+    num_bytes_printed += seq_puts(sf, "\n\n+\n\n");
+    sf->line_number += 4;
+  }
+  else if(sf->write_state == WS_SEQ)
+  {
+    num_bytes_printed += seq_puts(sf, "\n+\n\n");
+    sf->line_number += 3;
+  }
+  else if(sf->write_state == WS_QUAL)
+  {
+    num_bytes_printed += seq_puts(sf, "\n");
+    sf->line_number += 1;
+  }
+
+  return num_bytes_printed;
+}

@@ -154,7 +154,7 @@ int main(int argc, char** argv)
 
         if(bytes_written == bytes_written_before_qual)
         {
-          // No quality score were read - fill in
+          // No quality scores were read - fill in
           unsigned long i;
           *c = '?';
           for(i = 0; i < seq_length; i++)
@@ -165,10 +165,12 @@ int main(int argc, char** argv)
   }
 
   unsigned long seq_total_bases_read = seq_total_bases_passed(in_file);
+  unsigned long total_entries = seq_get_read_index(in_file);
 
   seq_file_close(in_file);
   bytes_written += seq_file_close(out_file);
 
+  printf("%lu entries read\n", total_entries);
   printf("%lu bases read\n", seq_total_bases_read);
   printf("%lu bytes written\n", bytes_written);
   printf("Done. \n");
