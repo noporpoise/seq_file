@@ -21,9 +21,6 @@
 
 #include "seq_common.h"
 
-// Array for complementing bases read from BAM/SAM files
-int8_t seq_comp_table[16] = {0,8,4,12,2,10,9,14,1,6,5,13,3,11,7,15};
-
 size_t _write_wrapped(SeqFile *sf, const char *str, size_t str_len)
 {
   size_t num_bytes_printed = 0;

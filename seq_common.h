@@ -40,11 +40,13 @@ struct SeqFile
 {
   const char *path;
 
-  gzFile *gz_file; // for reading FASTA/FASTQ/plain
-  samfile_t *sam_file; // For reading SAM/BAM
+  // for reading FASTA/FASTQ/plain
+  gzFile *gz_file;
 
   // For reading sam/bams
+  samFile *sam_file;
   bam1_t *bam;
+  bam_hdr_t *sam_header;
 
   char fastq_ascii_offset; // defaults to 33
 
@@ -86,9 +88,6 @@ struct SeqFile
   // State of writing
   WriteState write_state;
 };
-
-// Array for complementing bases read from BAM/SAM files
-int8_t seq_comp_table[16];
 
 // Write output MACROs
 // wrapper for fputs/gzputs

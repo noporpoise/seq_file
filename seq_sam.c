@@ -19,7 +19,13 @@
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "hts.h"
+
 #include "seq_sam.h"
+
+// Array for complementing bases read from BAM/SAM files
+static int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 9, 14,
+                                     1, 6, 5, 13, 3, 11, 7, 15 };
 
 char seq_next_read_sam(SeqFile *sf)
 {
@@ -30,36 +36,34 @@ char seq_next_read_sam(SeqFile *sf)
                                sf->entry_offset;
   }
 
-  if(samread(sf->sam_file, sf->bam) < 0)
+  if(sam_read1(sf->sam_file, sf->sam_header, sf->bam) < 0)
     return 0;
 
   // Get name
-  strbuf_append_str(sf->entry_name, bam1_qname(sf->bam));
+  strbuf_append_str(sf->entry_name, bam_get_qname(sf->bam));
 
   return 1;
 }
 
 char seq_read_base_sam(SeqFile *sf, char *c)
 {
-  // Get reverse
-  char is_reversed = sf->bam->core.flag & 16;
   unsigned long query_len = (unsigned long)sf->bam->core.l_qseq;
 
   if(sf->entry_offset >= query_len)
     return 0;
 
-  uint8_t *seq = bam1_seq(sf->bam);
+  uint8_t *seq = bam_get_seq(sf->bam);
 
-  if(is_reversed)
+  if(bam_is_rev(sf->bam))
   {
     unsigned long index = query_len - sf->entry_offset - 1;
-    int8_t b = bam1_seqi(seq, index);
-    *c = bam_nt16_rev_table[seq_comp_table[b]];
+    int8_t b = bam_seqi(seq, index);
+    *c = seq_nt16_str[seq_comp_table[b]];
   }
   else
   {
-    int8_t b = bam1_seqi(seq, sf->entry_offset);
-    *c = bam_nt16_rev_table[b];
+    int8_t b = bam_seqi(seq, sf->entry_offset);
+    *c = seq_nt16_str[b];
   }
 
   return 1;
@@ -67,16 +71,15 @@ char seq_read_base_sam(SeqFile *sf, char *c)
 
 char seq_read_qual_sam(SeqFile *sf, char *c)
 {
-  char is_reversed = sf->bam->core.flag & 16;
   unsigned long query_len = (unsigned long)sf->bam->core.l_qseq;
 
   if(sf->entry_offset_qual >= query_len)
     return 0;
 
-  uint8_t *seq = bam1_qual(sf->bam);
+  uint8_t *seq = bam_get_qual(sf->bam);
   unsigned long index;
 
-  if(is_reversed)
+  if(bam_is_rev(sf->bam))
     index = query_len - sf->entry_offset_qual - 1;
   else
     index = sf->entry_offset_qual;
@@ -94,19 +97,20 @@ char seq_read_all_bases_sam(SeqFile *sf, StrBuf *sbuf)
     return 0;
 
   // Get reverse
-  char is_reversed = sf->bam->core.flag & 16;
+  char is_reversed = bam_is_rev(sf->bam);
 
   strbuf_ensure_capacity(sbuf, qlen - sf->entry_offset);
 
-  uint8_t *seq = bam1_seq(sf->bam);
+  uint8_t *seq = bam_get_seq(sf->bam);
 
   // read in and reverse complement (if needed)
   unsigned long i;
   for(i = sf->entry_offset; i < qlen; i++)
   {
     unsigned long index = (is_reversed ? i : qlen - i - 1);
-    int8_t b = bam1_seqi(seq, index);
-    char c = bam_nt16_rev_table[is_reversed ? seq_comp_table[b] : b];
+    int8_t b = bam_seqi(seq, index);
+
+    char c = seq_nt16_str[is_reversed ? seq_comp_table[b] : b];
     strbuf_append_char(sbuf, c);
   }
 
@@ -121,11 +125,11 @@ char seq_read_all_quals_sam(SeqFile *sf, StrBuf *sbuf)
     return 0;
 
   // Get reverse
-  char is_reversed = sf->bam->core.flag & 16;
+  char is_reversed = bam_is_rev(sf->bam);
 
   strbuf_ensure_capacity(sbuf, qlen - sf->entry_offset);
 
-  uint8_t *seq = bam1_qual(sf->bam);
+  uint8_t *seq = bam_get_qual(sf->bam);
 
   // read in and reverse complement (if needed)
   unsigned long i;

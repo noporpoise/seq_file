@@ -12,16 +12,16 @@ ifndef STRING_BUF_PATH
 	STRING_BUF_PATH=$(HOME)/c/libs/string_buffer
 endif
 
-ifndef SAMTOOLS_PATH
-	SAMTOOLS_PATH=$(HOME)/bioinf/samtools-0.1.18
+ifndef HTS_PATH
+	HTS_PATH=$(HOME)/bioinf/htslib/htslib/
 endif
 
 LIB_STRING_BUF=$(STRING_BUF_PATH)/libstrbuf.a
-LIB_SAMTOOLS=$(SAMTOOLS_PATH)/libbam.a
+LIB_HTS=$(HTS_PATH)/libhts.a
 
-CFLAGS := $(CFLAGS) -Wall -Wextra -I $(SAMTOOLS_PATH) -I $(STRING_BUF_PATH)
+CFLAGS := $(CFLAGS) -Wall -Wextra -I $(HTS_PATH) -I $(STRING_BUF_PATH)
 
-LIB_FLAGS := $(LIB_STRING_BUF) $(LIB_SAMTOOLS) -lz -lm
+LIB_FLAGS := $(LIB_STRING_BUF) $(LIB_HTS) -lz -lm
 
 ifdef ZLIB_PATH
 	LIB_INCS := $(LIB_INCS) -L $(ZLIB_PATH)

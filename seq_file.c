@@ -24,6 +24,7 @@
 #include <string.h>
 #include <ctype.h> // tolower
 
+#include "hts.h"
 #include "sam.h"
 #include "string_buffer.h"
 
@@ -146,20 +147,24 @@ void _set_seq_filetype(SeqFile *sf)
   if(strcmp(sf->path,"-") != 0)
     seq_guess_filetype_from_path(sf->path, &file_type, &zipped);
 
-  if(file_type == SEQ_SAM)
+  if(file_type == SEQ_SAM || file_type == SEQ_BAM)
   {
-    // SAM
-    sf->sam_file = samopen(sf->path, "r", 0);
+    // SAM/BAM
+    sf->sam_file = sam_open(sf->path, file_type == SEQ_SAM ? "rs" : "rb", 0);
+
+    if(sf->sam_file == NULL)
+    {
+      fprintf(stderr, "%s:%i: Failed to open SAM/BAM file: %s\n",
+              __FILE__, __LINE__, sf->path);
+      exit(EXIT_FAILURE);
+    }
+
     sf->file_type = SEQ_SAM;
     sf->bam = bam_init1();
-    return;
-  }
-  else if(file_type == SEQ_BAM)
-  {
-    // BAM
-    sf->sam_file = samopen(sf->path, "rb", 0);
-    sf->file_type = SEQ_BAM;
-    sf->bam = bam_init1();
+
+    // Read header
+    sf->sam_header = sam_hdr_read(sf->sam_file);
+
     return;
   }
 
@@ -254,9 +259,10 @@ SeqFile* _create_default_seq_file(const char* file_path)
   sf->path = file_path;
 
   sf->gz_file = NULL;
-  sf->sam_file = NULL;
 
+  sf->sam_file = NULL;
   sf->bam = NULL;
+  sf->sam_header = NULL;
 
   sf->fastq_ascii_offset = 33;
 
@@ -319,12 +325,10 @@ SeqFile* seq_file_open_filetype(const char* file_path,
   switch(file_type)
   {
     case SEQ_SAM:
-      sf->sam_file = samopen(sf->path, "r", 0);
-      sf->bam = bam_init1();
-      break;
     case SEQ_BAM:
-      sf->sam_file = samopen(sf->path, "rb", 0);
+      sf->sam_file = sam_open(sf->path, "r", 0);
       sf->bam = bam_init1();
+      sf->sam_header = sam_hdr_read(sf->sam_file);
       break;
     case SEQ_FASTA:
     case SEQ_FASTQ:
@@ -443,7 +447,8 @@ size_t seq_file_close(SeqFile* sf)
   if(sf->file_type == SEQ_SAM || sf->file_type == SEQ_BAM)
   {
     bam_destroy1(sf->bam);
-    samclose(sf->sam_file);
+    bam_hdr_destroy(sf->sam_header);
+    sam_close(sf->sam_file);
   }
 
   if(sf->bases_buff != NULL)
