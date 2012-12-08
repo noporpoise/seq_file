@@ -13,8 +13,10 @@ ifndef STRING_BUF_PATH
 endif
 
 ifndef HTS_PATH
-	HTS_PATH=$(HOME)/bioinf/htslib/htslib/
+	HTS_PATH=$(HOME)/bioinf/htslib/
 endif
+
+HTS_PATH:=$(HTS_PATH)/htslib/
 
 LIB_STRING_BUF=$(STRING_BUF_PATH)/libstrbuf.a
 LIB_HTS=$(HTS_PATH)/libhts.a

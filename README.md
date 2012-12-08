@@ -40,22 +40,22 @@ Build
 
 Seq_file requires:
 
-* sam_tools [http://samtools.sourceforge.net/]
+* htslib [https://github.com/samtools/htslib]
 * string_buffer [https://github.com/noporpoise/string_buffer]
 
 It also requires zlib, which should already be installed.  
 
 To build the test code and the program seq_convert:
 
-    make STRING_BUF_PATH=path/to/string_buffer/ SAMTOOLS_PATH=path/to/samtools/
+    make STRING_BUF_PATH=path/to/string_buffer/ HTS_PATH=path/to/htslib/
 
 Sometimes the linker can't find your libz.a file (zlib), so you may need to try:
 
-    make STRING_BUF_PATH=path/to/string_buffer/ SAMTOOLS_PATH=path/to/samtools/ ZLIB_PATH=/dir/with/libz/in/
+    make STRING_BUF_PATH=path/to/string_buffer/ HTS_PATH=path/to/htslib/ ZLIB_PATH=/dir/with/libz/in/
 
 To call from your own programs, use the following in your Makefile etc.
 
-    LIBS=-lseqfile -lbam -lstrbuf -lz
+    LIBS=-lseqfile -lhts -lstrbuf -lz
     INCS=-I$(PATH_TO_SAMTOOLS) -I$(PATH_TO_STRING_BUFFER) -I$(PATH_TO_SEQ_FILE) \
          -L$(PATH_TO_SAMTOOLS) -L$(PATH_TO_STRING_BUFFER) -L$(PATH_TO_SEQ_FILE)
     gcc $(INCS) <your files / args etc.> $(LIBS)
