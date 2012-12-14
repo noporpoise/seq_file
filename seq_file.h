@@ -57,9 +57,9 @@ const char* seq_file_type_str(SeqFileType file_type, char zipped);
 // Get path
 const char* seq_get_path(const SeqFile *sf);
 
-// Get min and max quality values in the first 500 quality scores
+// Get min and max quality values in the first `num` quality scores
 // Returns -1 on error, 0 if no quality scores or no reads, 1 on success
-int seq_estimate_qual_limits(const char *path, int *min, int *max);
+int seq_estimate_qual_limits(const char *path, int num, int *min, int *max);
 
 // Get the number of bases read/written so far
 unsigned long seq_total_bases_passed(const SeqFile *sf);
