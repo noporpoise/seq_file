@@ -48,8 +48,6 @@ struct SeqFile
   bam1_t *bam;
   bam_hdr_t *sam_header;
 
-  char fastq_ascii_offset; // defaults to 33
-
   enum SeqFileType file_type;
 
   // have we seen a '>' at the start of a line in a fasta file?

@@ -57,11 +57,9 @@ const char* seq_file_type_str(SeqFileType file_type, char zipped);
 // Get path
 const char* seq_get_path(const SeqFile *sf);
 
-// Set/get FASTQ ASCII offset
-// Quality scores are returned in ASCII, this value is required when reading
-// from a SAM/BAM file, as they store quality scores without an offset
-void seq_set_fastq_ascii_offset(SeqFile *sf, char fastq_ascii_offset);
-char seq_get_fastq_ascii_offset(const SeqFile *sf);
+// Get min and max quality values in the first 500 quality scores
+// Returns -1 on error, 0 if no quality scores or no reads, 1 on success
+int seq_estimate_qual_limits(const char *path, int *min, int *max);
 
 // Get the number of bases read/written so far
 unsigned long seq_total_bases_passed(const SeqFile *sf);

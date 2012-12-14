@@ -264,8 +264,6 @@ SeqFile* _create_default_seq_file(const char* file_path)
   sf->bam = NULL;
   sf->sam_header = NULL;
 
-  sf->fastq_ascii_offset = 33;
-
   sf->file_type = SEQ_UNKNOWN;
   sf->read_line_start = 0;
 
@@ -491,16 +489,55 @@ const char* seq_get_path(const SeqFile* sf)
   return sf->path;
 }
 
-// Set FASTQ ASCII offset (also applies to SAM/BAM)
-void seq_set_fastq_ascii_offset(SeqFile *sf, char fastq_ascii_offset)
+// Get min and max quality values in the first 500 quality scores of a file.
+// Returns -1 on error, 0 if no quality scores or no reads, 1 on success
+int seq_estimate_qual_limits(const char *path, int *minptr, int *maxptr)
 {
-  sf->fastq_ascii_offset = fastq_ascii_offset;
-}
+  SeqFile *sf = seq_file_open(path);
 
-// Get FASTQ ASCII offset (also applies to SAM/BAM)
-char seq_get_fastq_ascii_offset(const SeqFile *sf)
-{
-  return sf->fastq_ascii_offset;
+  if(sf == NULL)
+  {
+    return -1;
+  }
+
+  if(!seq_has_quality_scores(sf))
+  {
+    seq_file_close(sf);
+    return 0;
+  }
+
+  char q;
+  int min = 255;
+  int max = 0;
+  int count = 0;
+
+  while(seq_next_read(sf))
+  {
+    while(count < 500 && seq_read_qual(sf, &q))
+    {
+      count++;
+
+      if(q > max)
+      {
+        max = q;
+      }
+
+      if(q < min)
+      {
+        min = q;
+      }
+    }
+  }
+
+  seq_file_close(sf);
+
+  if(count > 0)
+  {
+    *minptr = min;
+    *maxptr = max;
+  }
+
+  return (count > 0);
 }
 
 // Get the number of bases read/written so far

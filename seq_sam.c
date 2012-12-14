@@ -84,7 +84,7 @@ char seq_read_qual_sam(SeqFile *sf, char *c)
   else
     index = sf->entry_offset_qual;
 
-  *c = sf->fastq_ascii_offset + seq[index];
+  *c = 33 + seq[index];
 
   return 1;
 }
@@ -135,7 +135,7 @@ char seq_read_all_quals_sam(SeqFile *sf, StrBuf *sbuf)
   unsigned long i;
   for(i = sf->entry_offset; i < qlen; i++)
   {
-    char c = sf->fastq_ascii_offset + seq[is_reversed ? i : qlen - i - 1];
+    char c = 33 + seq[is_reversed ? i : qlen - i - 1];
     strbuf_append_char(sbuf, c);
   }
 

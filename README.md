@@ -35,6 +35,36 @@ It can also 'wrap lines' in the output:
 
     $ seq_convert in.fq.gz out.fa 80
 
+
+Example Code
+============
+
+Example code to read a file and print as a FASTA file using seq_file.
+For more example code see examples/example.c
+
+    SeqFile *sf = seq_file_open(path);
+
+    if(sf == NULL)
+    {
+      // Error opening file
+      fprintf(stderr, "Error: cannot read seq file '%s'\n", path);
+      exit(EXIT_FAILURE);
+    }
+
+    char c, q;
+
+    while(seq_next_read(sf))
+    {
+      printf(">%s\n", seq_get_read_name(sf));
+
+      while(seq_read_base(sf, &c))
+        putc(c, stdout);
+
+      putc('\n', stdout);
+    }
+
+    seq_file_close(sf);
+
 Build
 =====
 
@@ -104,8 +134,8 @@ Get the distance into this read's quality scores that we have read
 
     unsigned long seq_get_qual_offset(SeqFile *sf);
 
-If seq_next_read() returned 1 and seq_read_base() is now returning 0 (i.e we
-have read all the bases), seq_get_length() will now report the correct read
+If `seq_next_read()` returned 1 and `seq_read_base()` is now returning 0 (i.e we
+have read all the bases), `seq_get_length()` will now report the correct read
 length
 
     unsigned long seq_get_length(SeqFile *sf);
@@ -175,6 +205,12 @@ scores, 0 otherwise.  Note: quality scores may still all be set to 'null' e.g.
 
     char seq_has_quality_scores(const SeqFile *sf);
 
+
+Get min and max quality values in the first 500 quality scores of a file.
+Returns -1 on error, 0 if no quality scores or no reads, 1 on success.
+
+    char seq_estimate_qual_limits(const char *path, char *min, char *max);
+
 Development
 ===========
 
@@ -224,15 +260,15 @@ Proposed new API to deal with mate pairs:
 License
 =======
 
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation, either version 3 of the License, or
- (at your option) any later version.
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
  
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU General Public License for more details.
  
- You should have received a copy of the GNU General Public License
- along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
