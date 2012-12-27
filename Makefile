@@ -16,7 +16,8 @@ ifndef HTS_PATH
 	HTS_PATH=$(HOME)/bioinf/htslib/
 endif
 
-HTS_PATH:=$(HTS_PATH)/htslib/
+# Argments passed to makefile can only be changed with override
+override HTS_PATH := $(HTS_PATH)/htslib/
 
 LIB_STRING_BUF=$(STRING_BUF_PATH)/libstrbuf.a
 LIB_HTS=$(HTS_PATH)/libhts.a
