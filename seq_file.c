@@ -138,40 +138,27 @@ void seq_guess_filetype_from_path(const char *path, SeqFileType *file_type,
   free(strcpy);
 }
 
-// Determines file type and opens necessary streams + mallocs memory
-void _set_seq_filetype(SeqFile *sf)
+void _init_sam_bam(SeqFile *sf)
 {
-  // Guess filetype from path
-  SeqFileType file_type = SEQ_UNKNOWN;
-  char zipped = 0;
+  // SAM/BAM
+  const char *mode = sf->file_type == SEQ_SAM ? "rs" : "rb";
+  sf->sam_file = sam_open(sf->path, mode, 0);
 
-  if(strcmp(sf->path,"-") != 0)
-    seq_guess_filetype_from_path(sf->path, &file_type, &zipped);
-
-  if(file_type == SEQ_SAM || file_type == SEQ_BAM)
+  if(sf->sam_file == NULL)
   {
-    // SAM/BAM
-    sf->sam_file = sam_open(sf->path, file_type == SEQ_SAM ? "rs" : "rb", 0);
-
-    if(sf->sam_file == NULL)
-    {
-      fprintf(stderr, "%s:%i: Failed to open SAM/BAM file: %s\n",
-              __FILE__, __LINE__, sf->path);
-      exit(EXIT_FAILURE);
-    }
-
-    sf->file_type = SEQ_SAM;
-    sf->bam = bam_init1();
-
-    // Read header
-    sf->sam_header = sam_hdr_read(sf->sam_file);
-
-    return;
+    fprintf(stderr, "%s:%i: Failed to open SAM/BAM file: %s\n",
+            __FILE__, __LINE__, sf->path);
+    exit(EXIT_FAILURE);
   }
 
-  // If not SAM or BAM, we can open it and determine its contents -
-  // more reliable
+  sf->bam = bam_init1();
 
+  // Read header
+  sf->sam_header = sam_hdr_read(sf->sam_file);
+}
+
+void _init_plain_fasta_fastq(SeqFile *sf)
+{
   // Open file for the first time
   if(strcmp(sf->path, "-") == 0)
   {
@@ -188,20 +175,42 @@ void _set_seq_filetype(SeqFile *sf)
               __FILE__, __LINE__);
       return;
     }
+
+    #ifdef ZLIB_VERNUM
+      #if (ZLIB_VERNUM > 0x1240)
+        // Set buffer size to 1Mb
+        gzbuffer(sf->gz_file, (unsigned int)1024*1024);
+      #endif
+    #endif
+  }
+}
+
+// Determines file type and opens necessary streams + mallocs memory
+void _set_seq_filetype(SeqFile *sf)
+{
+  // Guess filetype from path
+  SeqFileType file_type = SEQ_UNKNOWN;
+  char zipped = 0;
+
+  if(strcmp(sf->path,"-") != 0)
+    seq_guess_filetype_from_path(sf->path, &file_type, &zipped);
+
+  if(file_type == SEQ_SAM || file_type == SEQ_BAM)
+  {
+    sf->file_type = file_type;
+    _init_sam_bam(sf);
+    return;
   }
 
-  #ifdef ZLIB_VERNUM
-    #if (ZLIB_VERNUM >= 0x1240)
-      // Set buffer size to 1Mb
-      gzbuffer(sf->gz_file, (unsigned int)1024*1024);
-    #endif
-  #endif
+  // If not SAM or BAM, we can open it and determine its contents -
+  // more reliable
 
-  int first_char;
+  _init_plain_fasta_fastq(sf);
 
   // Move sf->line_number from 0 to 1 on first character
   // Then for each newline, line_number++
 
+  int first_char;
   if((first_char = seq_getc(sf)) != -1)
   {
     sf->line_number++;
@@ -325,21 +334,31 @@ SeqFile* seq_file_open_filetype(const char* file_path,
   {
     case SEQ_SAM:
     case SEQ_BAM:
-      sf->sam_file = sam_open(sf->path, "r", 0);
-      sf->bam = bam_init1();
-      sf->sam_header = sam_hdr_read(sf->sam_file);
+      _init_sam_bam(sf);
       break;
     case SEQ_FASTA:
     case SEQ_FASTQ:
     case SEQ_PLAIN:
-      if(strcmp(sf->path, "-") == 0)
+      _init_plain_fasta_fastq(sf);
+
+      int first_char;
+      if((first_char = seq_getc(sf)) != -1)
       {
-        sf->gz_file = gzdopen(fileno(stdin), "r");
+        sf->line_number++;
+        sf->read_line_start = 1;
       }
-      else
+
+      if(file_type == SEQ_PLAIN && seq_ungetc(first_char,sf) == -1)
       {
-        sf->gz_file = gzopen(sf->path, "r");
+        fprintf(stderr, "%s:%i: Error -- ungetc failed\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
       }
+
+      if(file_type == SEQ_FASTQ)
+      {
+        sf->bases_buff = strbuf_new();
+      }
+
       break;
     default:
       fprintf(stderr, "%s:%i: Warning -- invalid SeqFileType in "

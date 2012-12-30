@@ -37,8 +37,8 @@ enum SeqFileType
 SeqFile* seq_file_open(const char* path);
 
 // Open a file assuming a given filetype
-SeqFile* seq_file_open_filetype(const char* file_path,
-                                SeqFileType file_type);
+//SeqFile* seq_file_open_filetype(const char* file_path,
+//                                SeqFileType file_type);
 
 // If open for writing: writes newline to file and returns 1 on success
 // otherwise return 0
