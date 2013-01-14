@@ -107,7 +107,7 @@ char seq_read_all_bases_sam(SeqFile *sf, StrBuf *sbuf)
   unsigned long i;
   for(i = sf->entry_offset; i < qlen; i++)
   {
-    unsigned long index = (is_reversed ? i : qlen - i - 1);
+    unsigned long index = (is_reversed ? qlen - i - 1 : i);
     int8_t b = bam_seqi(seq, index);
 
     char c = seq_nt16_str[is_reversed ? seq_comp_table[b] : b];
@@ -135,7 +135,7 @@ char seq_read_all_quals_sam(SeqFile *sf, StrBuf *sbuf)
   unsigned long i;
   for(i = sf->entry_offset; i < qlen; i++)
   {
-    char c = 33 + seq[is_reversed ? i : qlen - i - 1];
+    char c = 33 + seq[is_reversed ? qlen - i - 1 : i];
     strbuf_append_char(sbuf, c);
   }
 
