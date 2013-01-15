@@ -27,10 +27,9 @@ Tools
 =====
 
 Also included are some tools that use seq_file:
-
-facat: print file as FASTA
-fqcat: print file as FASTQ
-seqcat: print file sequence-only one entry per line ('plain' format)
+* `facat`: print file as FASTA
+* `fqcat`: print file as FASTQ
+* `seqcat`: print file sequence-only one entry per line ('plain' format)
 
 Build
 =====
