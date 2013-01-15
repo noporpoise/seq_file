@@ -4,6 +4,14 @@
 
 SETUP_SEQ_FILE();
 
+#if defined(FASTA)
+#define CMDSTR "facat"
+#elif defined(FASTQ)
+#define CMDSTR "fqcat"
+#else
+#define CMDSTR "seqcat"
+#endif
+
 char parse_entire_int(char *str, int *result)
 {
   char *tmp_str = str;
@@ -15,16 +23,28 @@ char parse_entire_int(char *str, int *result)
   return 1;
 }
 
-void print_usage(const char *cmd, const char *err)
+void print_usage(const char *err)
 {
-  if(err != NULL) fprintf(stderr, "%s: %s\n", cmd, err);
+  if(err != NULL) fprintf(stderr, "%s: %s\n", CMDSTR, err);
   else
   {
-    fprintf(stderr, "Usage: %s [OPTIONS] <file1> [file2] ..\n", cmd);
-    fprintf(stderr, "  -w   wrap lines by <wrap> characters\n");
-    fprintf(stderr, "  -uc  convert sequence to uppercase\n");
-    fprintf(stderr, "  -lc  convert sequence to lowercase\n");
-    fprintf(stderr, "  -h   show this help text\n");
+    fprintf(stderr, "Usage: %s [OPTIONS] <file1> [file2] ..\n", CMDSTR);
+
+    #if defined(FASTA)
+    fprintf(stderr, "  Print files in FASTA format\n");
+    #elif defined(FASTQ)
+    fprintf(stderr, "  Print files in FASTQ format\n");
+    #else
+    fprintf(stderr, "  Print files in 'plain' format -- one sequence per line\n");
+    #endif
+
+    fprintf(stderr, "\n  OPTIONS:\n");
+    #if defined(FASTA) || defined(FASTQ)
+    fprintf(stderr, "   -w <n>  wrap lines by <n> characters\n");
+    #endif
+    fprintf(stderr, "   -uc     convert sequence to uppercase\n");
+    fprintf(stderr, "   -lc     convert sequence to lowercase\n");
+    fprintf(stderr, "   -h      show this help text\n");
   }
   exit(EXIT_FAILURE);
 }
@@ -44,24 +64,29 @@ int main(int argc, char **argv)
 {
   // linewrap: 0 => don't
   // change case: 0 => don't, 1 => uppercase, 2 => lowercase
-  int argi, linewrap = 0, change_case = 0;
+  int argi, change_case = 0;
+
+  #if defined(FASTA) || defined(FASTQ)
+  int linewrap = 0;
+  #endif
 
   for(argi = 1; argi < argc; argi++)
   {
+    #if defined(FASTA) || defined(FASTQ)
     if(strcasecmp(argv[argi], "-w") == 0)
     {
-      if(argi == argc-1)
-        print_usage(argv[0], "-w requires an argument");
+      if(argi == argc-1) print_usage("-w <n> requires an argument");
       if(!parse_entire_int(argv[++argi], &linewrap) || linewrap <= 0)
-        print_usage(argv[0], "invalid -w argument");
-    }
-    else if(strcasecmp(argv[argi], "-uc") == 0) change_case = 1;
+        print_usage("invalid -w argument");
+    } else
+    #endif
+    if(strcasecmp(argv[argi], "-uc") == 0) change_case = 1;
     else if(strcasecmp(argv[argi], "-lc") == 0) change_case = 2;
-    else if(strcasecmp(argv[argi], "-h") == 0) print_usage(argv[0], NULL);
+    else if(strcasecmp(argv[argi], "-h") == 0) print_usage(NULL);
     else break;
   }
 
-  if(argi == argc) print_usage(argv[0], NULL);
+  if(argi == argc) print_usage(NULL);
 
   read_t *r = seq_read_alloc();
   seq_file_t *f;
