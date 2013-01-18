@@ -115,6 +115,7 @@ struct read_t
                                                                                \
     int c;                                                                     \
     sf->headc = (sf->nextc != -1 ? sf->nextc : __getc(sf));                    \
+    sf->nextc = -1;                                                            \
     if(sf->headc == -1) return 0;                                              \
     else if(sf->headc == '@')                                                  \
     {                                                                          \
