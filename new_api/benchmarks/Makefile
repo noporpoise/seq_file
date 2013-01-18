@@ -4,7 +4,7 @@ endif
 # Argments passed to makefile can only be changed with override
 override HTSLIB:=$(HTSLIB)/htslib/
 
-CFLAGS=-I .. -I $(HTSLIB) -L $(HTSLIB)
+CFLAGS=-Wall -Wextra -I .. -I $(HTSLIB) -L $(HTSLIB)
 LINKING=-lhts -lpthread -lz
 
 all: seqtest ktest

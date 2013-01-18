@@ -12,12 +12,12 @@ SETUP_SEQ_FILE();
 #define CMDSTR "seqcat"
 #endif
 
-char parse_entire_int(char *str, int *result)
+char parse_entire_uint(char *str, size_t *result)
 {
   char *tmp_str = str;
   long tmp = strtol(str, &tmp_str, 10);
 
-  if(tmp > INT_MAX || tmp < INT_MIN || tmp_str != str+strlen(str)) return 0;
+  if(tmp > UINT_MAX || tmp < 0 || tmp_str != str+strlen(str)) return 0;
 
   *result = (int)tmp;
   return 1;
@@ -67,7 +67,7 @@ int main(int argc, char **argv)
   int argi, change_case = 0;
 
   #if defined(FASTA) || defined(FASTQ)
-  int linewrap = 0;
+  size_t linewrap = 0;
   #endif
 
   for(argi = 1; argi < argc; argi++)
@@ -76,7 +76,7 @@ int main(int argc, char **argv)
     if(strcasecmp(argv[argi], "-w") == 0)
     {
       if(argi == argc-1) print_usage("-w <n> requires an argument");
-      if(!parse_entire_int(argv[++argi], &linewrap) || linewrap <= 0)
+      if(!parse_entire_uint(argv[++argi], &linewrap) || linewrap <= 0)
         print_usage("invalid -w argument");
     } else
     #endif
@@ -99,7 +99,7 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
 
-    int i,j;
+    size_t i;
     while(seq_read(f,r) > 0)
     {
       if(change_case == 1) fixcase(r->seq.b,r->seq.end,i,toupper);
@@ -119,6 +119,7 @@ int main(int argc, char **argv)
         }
         else
         {
+          size_t j;
           printf("@%s\n", r->name.b);
           printwrap(r->seq.b, r->seq.end, linewrap, i, j);
           printf("+\n");
@@ -128,6 +129,7 @@ int main(int argc, char **argv)
         if(linewrap == 0) printf(">%s\n%s\n", r->name.b, r->seq.b);
         else
         {
+          size_t j;
           printf(">%s\n", r->name.b);
           printwrap(r->seq.b, r->seq.end, linewrap, i, j);
         }

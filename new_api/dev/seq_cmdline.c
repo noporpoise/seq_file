@@ -5,6 +5,13 @@ SETUP_SEQ_FILE();
 
 int main(int argc, char **argv)
 {
+  (void)argv;
+
+  if(argc != 2) {
+    fprintf(stderr, "usage: seq_cmdline\n");
+    exit(EXIT_FAILURE);
+  }
+
   seq_file_t *file = seq_open_fh(stdin,0,0);
 
   if(file == NULL)

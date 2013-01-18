@@ -341,12 +341,13 @@ struct read_t
 // Get min and max quality values in the first `num` bases of a file.
 // Returns 0 if no qual scores, 1 on success, -1 if read error
 #define _func_get_qual_limits() \
-  int seq_get_qual_limits(const char *path, int num, int *minptr, int *maxptr) \
+  int seq_get_qual_limits(const char *path, size_t num, int *minptr, int *maxptr)\
   {                                                                            \
     seq_file_t *sf = seq_open(path);                                           \
     if(sf == NULL) return -1;                                                  \
     read_t *r = seq_read_alloc();                                              \
-    int i, limit, count = 0, min = INT_MAX, max = 0;                           \
+    int i, limit, min = INT_MAX, max = 0;                                      \
+    size_t count = 0;                                                          \
                                                                                \
     while(count < num && seq_read(sf,r))                                       \
     {                                                                          \
