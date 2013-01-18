@@ -9,12 +9,15 @@ LINKING=-lhts -lpthread -lz
 
 all: ../bin/facat ../bin/fqcat ../bin/seqcat
 
-../bin/facat: seq_cat.c ../seq_file.h ../buffered_input.h
+../bin/facat: ../bin seq_cat.c ../seq_file.h ../buffered_input.h
 	$(CC) -DFASTA=1 $(CFLAGS) -o ../bin/facat seq_cat.c $(LINKING)
-../bin/fqcat: seq_cat.c ../seq_file.h ../buffered_input.h
+../bin/fqcat: ../bin seq_cat.c ../seq_file.h ../buffered_input.h
 	$(CC) -DFASTQ=1 $(CFLAGS) -o ../bin/fqcat seq_cat.c $(LINKING)
-../bin/seqcat: seq_cat.c ../seq_file.h ../buffered_input.h
+../bin/seqcat: ../bin seq_cat.c ../seq_file.h ../buffered_input.h
 	$(CC) -DPLAIN=1 $(CFLAGS) -o ../bin/seqcat seq_cat.c $(LINKING)
+
+../bin:
+	mkdir -p ../bin
 
 clean:
 	rm -rf ../bin/*
