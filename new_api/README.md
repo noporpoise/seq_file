@@ -119,7 +119,7 @@ Check that a read looks valid.  Returns 1 if it appears valid, 0 otherwise.
 A read is *invalid* if it has:
 * an invalid sequence character
 * quality scores but of a different length the sequence
-* a quality score that is <33 or >104
+* a quality score that is `<33` or `>104`
 
 Valid sequence characters are (upper and lower case are valid):
 * DNA: ACGTN
