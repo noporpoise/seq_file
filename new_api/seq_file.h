@@ -18,6 +18,7 @@ typedef struct read_t read_t;
 
 struct seq_file_t
 {
+  char *path;
   FILE* f_file;
   gzFile *gz_file;
   samFile *s_file;
@@ -193,7 +194,7 @@ struct read_t
     sf->s_file = NULL;                                                         \
     sf->headc = sf->nextc = -1;                                                \
     sf->in.size = sf->in.begin = sf->in.end = 0;                               \
-    sf->in.b = NULL;                                                           \
+    sf->path = sf->in.b = NULL;                                                \
   } while(0)
 
 #if defined(ZLIB_VERNUM) && ZLIB_VERNUM >= 0x1240
@@ -224,6 +225,7 @@ struct read_t
       return NULL;                                                             \
     }                                                                          \
     seq_setup(sf, use_zlib, buf_size);                                         \
+    sf->path = strdup("-");                                                    \
     return sf;                                                                 \
   }
 
@@ -253,6 +255,7 @@ struct read_t
       }                                                                        \
       seq_setup(sf, use_zlib, buf_size);                                       \
     }                                                                          \
+    sf->path = strdup(p);                                                      \
     return sf;                                                                 \
   }
 
