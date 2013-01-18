@@ -160,7 +160,7 @@ If the code above is pasted into a file test.c and the files `seq_file.h` and
 with the following command:
 
     HTSLIB=PATH/TO/HTSLIB
-    gcc -o test test.c -I$(HTSLIB)/htslib -L$(HTSLIB)/htslib -htslib -lpthread -lz
+    gcc -o test test.c -I$(HTSLIB)/htslib -L$(HTSLIB)/htslib -lhts -lpthread -lz
 
 You may notice we had to specify the subdirectory of htslib, since that is where
 the .h files and library (libhts.a) reside.  You'll need to compile htslib first.
