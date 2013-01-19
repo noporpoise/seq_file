@@ -68,7 +68,7 @@ freadline(f,out)
 
 // Define readline for gzFile and FILE (unbuffered)
 #define _func_readline(name,type_t,__gets) \
-  size_t name(type_t *file, buffer_t *buf)                                     \
+  size_t name(type_t file, buffer_t *buf)                                      \
   {                                                                            \
     buffer_ensure_capacity(buf, buf->end+1);                                   \
     size_t n, total_read = 0;                                                  \
@@ -99,7 +99,7 @@ freadline_buf(f,in,out)
 
 // Define getc for gzFile and FILE (buffered)
 #define _func_getc_buf(fname,type_t,__read)                                    \
-  int fname(type_t *file, buffer_t *in)                                        \
+  int fname(type_t file, buffer_t *in)                                         \
   {                                                                            \
     if(in->begin >= in->end) {                                                 \
       READ_BUFFER(file,in,__read);                                             \
@@ -110,7 +110,7 @@ freadline_buf(f,in,out)
 
 // Define readline for gzFile and FILE (buffered)
 #define _func_readline_buf(fname,type_t,__read) \
-  size_t fname(type_t *file, buffer_t *in, buffer_t *buf)                      \
+  size_t fname(type_t file, buffer_t *in, buffer_t *buf)                       \
   {                                                                            \
     if(in->begin >= in->end) { READ_BUFFER(file,in,__read); }                  \
     size_t new_buf_len, total_read = 0;                                        \
@@ -135,11 +135,11 @@ freadline_buf(f,in,out)
 #define BUFFERED_INPUT_SETUP() \
   _buffer_functions()                                                          \
   _func_getc_buf(gzgetc_buf,gzFile,gzread2)                                    \
-  _func_getc_buf(fgetc_buf,FILE,fread2)                                        \
+  _func_getc_buf(fgetc_buf,FILE*,fread2)                                       \
   _func_readline(gzreadline,gzFile,gzgets2)                                    \
-  _func_readline(freadline,FILE,fgets2)                                        \
+  _func_readline(freadline,FILE*,fgets2)                                       \
   _func_readline_buf(gzreadline_buf,gzFile,gzread2)                            \
-  _func_readline_buf(freadline_buf,FILE,fread2)                                \
+  _func_readline_buf(freadline_buf,FILE*,fread2)                               \
                                                                                \
   char buffer_init(buffer_t *b, size_t s) {                                    \
     if((b->b = (char*)malloc(sizeof(char)*s)) == NULL) return 0;               \

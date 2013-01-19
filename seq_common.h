@@ -41,7 +41,7 @@ struct SeqFile
   const char *path;
 
   // for reading FASTA/FASTQ/plain
-  gzFile *gz_file;
+  gzFile gz_file;
 
   // For reading sam/bams
   samFile *sam_file;

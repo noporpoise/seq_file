@@ -397,7 +397,7 @@ SeqFile* seq_file_open_write(const char* file_path, SeqFileType file_type,
     line_wrap = 0;
   }
 
-  gzFile* gz_file = NULL;
+  gzFile gz_file = NULL;
   FILE* plain_file = NULL;
 
   if(gzip)

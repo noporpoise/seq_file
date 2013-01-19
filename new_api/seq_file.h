@@ -19,8 +19,8 @@ typedef struct read_t read_t;
 struct seq_file_t
 {
   char *path;
-  FILE* f_file;
-  gzFile *gz_file;
+  FILE *f_file;
+  gzFile gz_file;
   samFile *s_file;
   bam1_t *bam;
   bam_hdr_t *bam_header;
