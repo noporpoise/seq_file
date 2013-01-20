@@ -43,6 +43,8 @@ struct read_t
 #define seq_is_fastq(sf) ((sf)->s_file == NULL && (sf)->headc == '@')
 #define seq_is_plain(sf) ((sf)->s_file == NULL && (sf)->headc != '@' && (sf)->headc != '>')
 
+#define seq_get_path(sf) ((sf)->path)
+
 // fh could be sam,FASTA,FASTQ,txt (+gzip)
 // file could be sam,bam,FASTA,FASTQ,txt (+gzip)
 
@@ -125,9 +127,11 @@ struct read_t
                                                                                \
       while((c = __getc(sf)) != '+') {                                         \
         if(c == -1) return -1;                                                 \
-        if(c != '\r' && c != '\n') { buffer_append_char(&read->seq,c); }       \
-        if(__readline(sf, read->seq) == 0) return -1;                          \
-        CHOMP_BUFFER(read->seq);                                               \
+        if(c != '\r' && c != '\n') {                                           \
+          buffer_append_char(&read->seq,c);                                    \
+          if(__readline(sf, read->seq) == 0) return -1;                        \
+          CHOMP_BUFFER(read->seq);                                             \
+        }                                                                      \
       }                                                                        \
       while((c = __getc(sf)) != -1 && c != '\n');                              \
       if(c == -1) return -1;                                                   \
@@ -143,10 +147,12 @@ struct read_t
                                                                                \
       while((c = __getc(sf)) != '>') {                                         \
         if(c == -1) return 1;                                                  \
-        if(c != '\r' && c != '\n') { buffer_append_char(&read->seq,c); }       \
-        size_t r = __readline(sf, read->seq);                                  \
-        CHOMP_BUFFER(read->seq);                                               \
-        if(r == 0) return 1;                                                   \
+        if(c != '\r' && c != '\n') {                                           \
+          buffer_append_char(&read->seq,c);                                    \
+          size_t r = __readline(sf, read->seq);                                \
+          CHOMP_BUFFER(read->seq);                                             \
+          if(r == 0) return 1;                                                 \
+        }                                                                      \
       }                                                                        \
                                                                                \
       sf->nextc = c;                                                           \
