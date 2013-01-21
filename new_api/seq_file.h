@@ -300,7 +300,7 @@ struct read_t
   filetype_t _guess_filetype_from_content(const char *path)                    \
   {                                                                            \
     char buf[20];                                                              \
-    gzFile *gz = gzopen(path, "r");                                            \
+    gzFile gz = gzopen(path, "r");                                             \
     if(gz == NULL) return IS_ERROR;                                            \
     int read = gzread(gz,buf,20);                                              \
     gzclose(gz);                                                               \

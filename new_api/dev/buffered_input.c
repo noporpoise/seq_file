@@ -8,7 +8,7 @@ int main(int argc, char **argv)
 
   buffer_t *in = buffer_alloc(10);
   buffer_t *buf = buffer_alloc(10);
-  // gzFile *f = gzopen(argv[1],"r");
+  // gzFile f = gzopen(argv[1],"r");
   FILE *f = fopen(argv[1],"r");
   if(f == NULL) exit(EXIT_FAILURE);
 
