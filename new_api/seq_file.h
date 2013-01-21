@@ -178,7 +178,7 @@ struct read_t
 
 // Create and destroy read structs
 #define _func_reads()  \
-  read_t* seq_read_alloc()                                                     \
+  static read_t* seq_read_alloc()                                              \
   {                                                                            \
     read_t *r = calloc(1, sizeof(read_t));                                     \
     buffer_init(&r->name, 512);                                                \
@@ -186,7 +186,7 @@ struct read_t
     buffer_init(&r->qual, DEFAULT_BUFSIZE);                                    \
     return r;                                                                  \
   }                                                                            \
-  void seq_read_destroy(read_t *r)                                             \
+  static void seq_read_destroy(read_t *r)                                      \
   {                                                                            \
     free(r->name.b);                                                           \
     free(r->seq.b);                                                            \
@@ -221,7 +221,7 @@ struct read_t
 
 // Can only be used for plain,fasta,fastq (+gzip) formats
 #define _func_open_fh() \
-  seq_file_t* seq_open_fh(FILE *fh, char use_zlib, size_t buf_size)            \
+  static seq_file_t* seq_open_fh(FILE *fh, char use_zlib, size_t buf_size)     \
   {                                                                            \
     seq_file_t *sf = (seq_file_t*)calloc(1, sizeof(seq_file_t));               \
     seq_file_init(sf);                                                         \
@@ -236,7 +236,7 @@ struct read_t
   }
 
 #define _func_open2() \
-  seq_file_t* seq_open2(const char *p, char sam, char use_zlib, size_t buf_size)\
+  static seq_file_t* seq_open2(const char *p, char sam, char use_zlib, size_t buf_size)\
   {                                                                            \
     seq_file_t *sf = (seq_file_t*)calloc(1, sizeof(seq_file_t));               \
     seq_file_init(sf);                                                         \
@@ -272,7 +272,7 @@ struct read_t
                  IS_SEQ, IS_SEQ_GZIP,                                          \
                  IS_SAM, IS_BAM } filetype_t;                                  \
                                                                                \
-  filetype_t _guess_filetype_from_path(const char *path)                       \
+  static filetype_t _guess_filetype_from_path(const char *path)                \
   {                                                                            \
     size_t plen = strlen(path);                                                \
     const char* exts[EXT_ARRLEN]                                               \
@@ -297,7 +297,7 @@ struct read_t
                                                                                \
     return IS_UNKNOWN;                                                         \
   }                                                                            \
-  filetype_t _guess_filetype_from_content(const char *path)                    \
+  static filetype_t _guess_filetype_from_content(const char *path)             \
   {                                                                            \
     char buf[20];                                                              \
     gzFile gz = gzopen(path, "r");                                             \
@@ -312,7 +312,7 @@ struct read_t
   }
 
 #define _func_open() \
-  seq_file_t* seq_open(const char *p)                                          \
+  static seq_file_t* seq_open(const char *p)                                   \
   {                                                                            \
     if(strcmp(p,"-") == 0) return seq_open_fh(stdin, 0, 0);                    \
     filetype_t type = _guess_filetype_from_path(p);                            \
@@ -335,7 +335,7 @@ struct read_t
   }
 
 #define _func_close() \
-  void seq_close(seq_file_t *sf)                                               \
+  static void seq_close(seq_file_t *sf)                                        \
   {                                                                            \
     if(sf->f_file != NULL) fclose(sf->f_file);                                 \
     else if(sf->gz_file != NULL) gzclose(sf->gz_file);                         \
@@ -351,7 +351,7 @@ struct read_t
 // Get min and max quality values in the first `num` bases of a file.
 // Returns 0 if no qual scores, 1 on success, -1 if read error
 #define _func_get_qual_limits() \
-  int seq_get_qual_limits(const char *path, size_t num, int *minptr, int *maxptr)\
+  static int seq_get_qual_limits(const char *path, size_t num, int *minptr, int *maxptr)\
   {                                                                            \
     seq_file_t *sf = seq_open(path);                                           \
     if(sf == NULL) return -1;                                                  \
@@ -381,7 +381,7 @@ struct read_t
   }
 
 #define _func_read_valid(fname,alphabet) \
-  char fname(read_t *r)                                                        \
+  static char fname(read_t *r)                                                 \
   {                                                                            \
     size_t i;                                                                  \
     if(r->qual.end != 0) {                                                     \
