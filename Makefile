@@ -24,7 +24,7 @@ LIB_HTS=$(HTS_PATH)/libhts.a
 
 CFLAGS := $(CFLAGS) -Wall -Wextra -I $(HTS_PATH) -I $(STRING_BUF_PATH)
 
-LIB_FLAGS := $(LIB_STRING_BUF) $(LIB_HTS) -lz -lm
+LIB_FLAGS := $(LIB_STRING_BUF) $(LIB_HTS) -lpthread -lz -lm
 
 ifdef ZLIB_PATH
 	LIB_INCS := $(LIB_INCS) -L $(ZLIB_PATH)
