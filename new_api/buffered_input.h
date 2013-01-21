@@ -23,14 +23,14 @@ typedef struct
 // size_t s is the number of bytes you want to be able to store
 // the actual buffer is created with s+1 bytes to allow for the \0
 #define _buffer_functions() \
-  void buffer_ensure_capacity(buffer_t *buf, size_t s)                         \
+  static inline void buffer_ensure_capacity(buffer_t *buf, size_t s)           \
   {                                                                            \
     if((buf)->size < (++s)) {                                                  \
       (buf)->size = ROUNDUP2POW(s);                                            \
       (buf)->b = realloc((buf)->b, (buf)->size);                               \
     }                                                                          \
   }                                                                            \
-  void buffer_append_str(buffer_t *buf, char *str)                             \
+  static inline void buffer_append_str(buffer_t *buf, char *str)               \
   {                                                                            \
     size_t len = buf->end + strlen(str);                                       \
     buffer_ensure_capacity(buf, len);                                          \
@@ -57,6 +57,8 @@ gzreadline(gz,out)
 freadline(f,out)
 */
 
+#define buffer_destroy(buf) do{free((buf)->b); free(buf); } while(0)
+
 // Define read for gzFile and FILE (unbuffered)
 #define gzread2(gz,buf,len) gzread(gz,buf,len)
 #define fread2(f,buf,len) fread(buf,sizeof(char),len,file)
@@ -68,7 +70,7 @@ freadline(f,out)
 
 // Define readline for gzFile and FILE (unbuffered)
 #define _func_readline(name,type_t,__gets) \
-  size_t name(type_t file, buffer_t *buf)                                      \
+  static inline size_t name(type_t file, buffer_t *buf)                        \
   {                                                                            \
     buffer_ensure_capacity(buf, buf->end+1);                                   \
     size_t n, total_read = 0;                                                  \
@@ -99,7 +101,7 @@ freadline_buf(f,in,out)
 
 // Define getc for gzFile and FILE (buffered)
 #define _func_getc_buf(fname,type_t,__read)                                    \
-  int fname(type_t file, buffer_t *in)                                         \
+  static inline int fname(type_t file, buffer_t *in)                           \
   {                                                                            \
     if(in->begin >= in->end) {                                                 \
       READ_BUFFER(file,in,__read);                                             \
@@ -110,7 +112,7 @@ freadline_buf(f,in,out)
 
 // Define readline for gzFile and FILE (buffered)
 #define _func_readline_buf(fname,type_t,__read) \
-  size_t fname(type_t file, buffer_t *in, buffer_t *buf)                       \
+  static inline size_t fname(type_t file, buffer_t *in, buffer_t *buf)         \
   {                                                                            \
     if(in->begin >= in->end) { READ_BUFFER(file,in,__read); }                  \
     size_t new_buf_len, total_read = 0;                                        \
@@ -141,23 +143,18 @@ freadline_buf(f,in,out)
   _func_readline_buf(gzreadline_buf,gzFile,gzread2)                            \
   _func_readline_buf(freadline_buf,FILE*,fread2)                               \
                                                                                \
-  char buffer_init(buffer_t *b, size_t s) {                                    \
+  static char buffer_init(buffer_t *b, size_t s) {                             \
     if((b->b = (char*)malloc(sizeof(char)*s)) == NULL) return 0;               \
     b->size = s;                                                               \
     b->begin = b->end = 0;                                                     \
     return 1;                                                                  \
   }                                                                            \
                                                                                \
-  buffer_t* buffer_alloc(size_t s) {                                           \
+  static buffer_t* buffer_alloc(size_t s) {                                    \
     buffer_t *b = (buffer_t*)malloc(sizeof(buffer_t));                         \
     if(b == NULL) return NULL;                                                 \
     else if(buffer_init(b,s)) return b;                                        \
     free(b); return NULL; /* couldn't malloc */                                \
-  }                                                                            \
-                                                                               \
-  void buffer_destroy(buffer_t* b) {                                           \
-    free(b->b);                                                                \
-    free(b);                                                                   \
   }
 
 #endif
