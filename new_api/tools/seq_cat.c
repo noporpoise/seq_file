@@ -2,8 +2,6 @@
 #include <ctype.h> // toupper tolower
 #include "seq_file.h"
 
-SETUP_SEQ_FILE();
-
 #if defined(FASTA)
 #define CMDSTR "facat"
 #elif defined(FASTQ)
@@ -142,4 +140,6 @@ int main(int argc, char **argv)
     seq_close(f);
   }
   seq_read_destroy(r);
+
+  return EXIT_SUCCESS;
 }

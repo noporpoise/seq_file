@@ -20,28 +20,57 @@ typedef struct
 // Buffer functions
 #define ROUNDUP2POW(x) (0x1 << (64 - __builtin_clzl(x)))
 
+static inline char buffer_init(buffer_t *b, size_t s)
+{
+  if((b->b = (char*)malloc(sizeof(char)*s)) == NULL) return 0;
+  b->size = s;
+  b->begin = b->end = 0;
+  return 1;
+}
+
+static inline buffer_t* buffer_alloc(size_t s)
+{
+  buffer_t *b = (buffer_t*)malloc(sizeof(buffer_t));
+  if(b == NULL) return NULL;
+  else if(buffer_init(b,s)) return b;
+  free(b); return NULL; /* couldn't malloc */
+}
+
+#define buffer_destroy(buf) do{free((buf)->b); free(buf); } while(0)
+
 // size_t s is the number of bytes you want to be able to store
 // the actual buffer is created with s+1 bytes to allow for the \0
-#define _buffer_functions() \
-  static inline void buffer_ensure_capacity(buffer_t *buf, size_t s)           \
-  {                                                                            \
-    if((buf)->size < (++s)) {                                                  \
-      (buf)->size = ROUNDUP2POW(s);                                            \
-      (buf)->b = realloc((buf)->b, (buf)->size);                               \
-    }                                                                          \
-  }                                                                            \
-  static inline void buffer_append_str(buffer_t *buf, char *str)               \
-  {                                                                            \
-    size_t len = buf->end + strlen(str);                                       \
-    buffer_ensure_capacity(buf, len);                                          \
-    memcpy(buf->b+buf->end, str, len);                                         \
-    buf->b[buf->end = len] = 0;                                                \
+static inline void buffer_ensure_capacity(buffer_t *buf, size_t s)
+{
+  if(buf->size < ++s) {
+    buf->size = ROUNDUP2POW(s);
+    buf->b = realloc(buf->b, buf->size);
   }
+}
 
-#define buffer_append_char(buf,c) do { \
-    buffer_ensure_capacity((buf), (buf)->end+1);                               \
-    (buf)->b[(buf)->end++] = (c);                                              \
-    (buf)->b[(buf)->end] = '\0';                                               \
+static inline void buffer_append_str(buffer_t *buf, char *str)
+{
+  size_t len = buf->end + strlen(str);
+  buffer_ensure_capacity(buf, len);
+  memcpy(buf->b+buf->end, str, len);
+  buf->b[buf->end = len] = 0;
+}
+
+static inline void buffer_append_char(buffer_t *buf, char c)
+{
+  buffer_ensure_capacity(buf, buf->end+1);
+  buf->b[buf->end++] = c;
+  buf->b[buf->end] = '\0';
+}
+
+#define buffer_terminate(buf) (buf.b[buf.end] = 0)
+
+#define buffer_chomp(buf) do { \
+    if(buf.end > 0 && buf.b[buf.end-1] == '\n') {                              \
+      buf.end--;                                                               \
+      if(buf.end > 0 && buf.b[buf.end-1] == '\r') buf.end--;                   \
+      buf.b[buf.end] = 0;                                                      \
+    }                                                                          \
   } while(0)
 
 /* 
@@ -56,8 +85,6 @@ fgets2(f,buf,len)
 gzreadline(gz,out)
 freadline(f,out)
 */
-
-#define buffer_destroy(buf) do{free((buf)->b); free(buf); } while(0)
 
 // Define read for gzFile and FILE (unbuffered)
 #define gzread2(gz,buf,len) gzread(gz,buf,len)
@@ -83,6 +110,9 @@ freadline(f,out)
     }                                                                          \
     return total_read;                                                         \
   }
+
+_func_readline(gzreadline,gzFile,gzgets2)
+_func_readline(freadline,FILE*,fgets2)
 
 /* Buffered */
 
@@ -110,6 +140,9 @@ freadline_buf(f,in,out)
     return in->b[in->begin++];                                                 \
   }
 
+_func_getc_buf(gzgetc_buf,gzFile,gzread2)
+_func_getc_buf(fgetc_buf,FILE*,fread2)
+
 // Define readline for gzFile and FILE (buffered)
 #define _func_readline_buf(fname,type_t,__read) \
   static inline size_t fname(type_t file, buffer_t *in, buffer_t *buf)         \
@@ -134,27 +167,9 @@ freadline_buf(f,in,out)
     return total_read;                                                         \
   }
 
-#define BUFFERED_INPUT_SETUP() \
-  _buffer_functions()                                                          \
-  _func_getc_buf(gzgetc_buf,gzFile,gzread2)                                    \
-  _func_getc_buf(fgetc_buf,FILE*,fread2)                                       \
-  _func_readline(gzreadline,gzFile,gzgets2)                                    \
-  _func_readline(freadline,FILE*,fgets2)                                       \
-  _func_readline_buf(gzreadline_buf,gzFile,gzread2)                            \
-  _func_readline_buf(freadline_buf,FILE*,fread2)                               \
-                                                                               \
-  static char buffer_init(buffer_t *b, size_t s) {                             \
-    if((b->b = (char*)malloc(sizeof(char)*s)) == NULL) return 0;               \
-    b->size = s;                                                               \
-    b->begin = b->end = 0;                                                     \
-    return 1;                                                                  \
-  }                                                                            \
-                                                                               \
-  static buffer_t* buffer_alloc(size_t s) {                                    \
-    buffer_t *b = (buffer_t*)malloc(sizeof(buffer_t));                         \
-    if(b == NULL) return NULL;                                                 \
-    else if(buffer_init(b,s)) return b;                                        \
-    free(b); return NULL; /* couldn't malloc */                                \
-  }
+_func_readline_buf(gzreadline_buf,gzFile,gzread2)
+_func_readline_buf(freadline_buf,FILE*,fread2)
+
+#define BUFFERED_INPUT_SETUP()
 
 #endif
