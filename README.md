@@ -1,13 +1,16 @@
 seq_file
 ========
+C Library for reading multiple bioinformatics sequence file formats  
+https://github.com/noporpoise/seq_file  
+Isaac Turner turner.isaac@gmail.com  
+4 July 2012, GPLv3  
 
-C Library for reading multiple bioinformatics sequence file formats
-
-https://github.com/noporpoise/seq_file
-
-Isaac Turner turner.isaac@gmail.com
-
-4 July 2012, GPLv3
+    *NOTE*: new_api/ will soon replace the code and current API. This implements
+    buffered and unbuffered reading which provides a significant speed increase
+    for reading gzip files on older systems. It also drops the dependency
+    for string_buffer and is implemented entirely in two header files.  It does
+    not provide all the same features, please get in touch if there's anything
+    you'd like to see added to new_api. -Isaac
 
 About
 =====

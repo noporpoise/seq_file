@@ -36,10 +36,14 @@ all: clean $(OBJS)
 	ar -csru libseqfile.a $(OBJS)
 	$(CC) -o seq_convert $(CFLAGS) seq_convert.c libseqfile.a $(LIB_FLAGS)
 	$(CC) -o seq_file_test $(CFLAGS) seq_file_test.c libseqfile.a $(LIB_FLAGS)
+	cd new_api; make HTS_PATH=$(HTS_PATH)
 
 clean:
 	rm -rf $(OBJS) libseqfile.a seq_convert seq_file_test \
 	       seq_file.dSYM seq_file.greg seq_convert.dSYM seq_file_test.dSYM
+	cd new_api; make clean
+
+.PHONY: all clean
 
 %.o : %.c %.h
 	$(CC) $(CFLAGS) -c $< -o $@
