@@ -212,11 +212,12 @@ static inline void seq_read_destroy(read_t *r)
 #define seq_setup(sf,use_zlib,buf_size) do \
   {                                                                            \
     sf->in.size = buf_size;                                                    \
-    if(sf->in.size > 0 && (sf->in.b = (char*)malloc(sf->in.size)) == NULL)     \
-    { free(sf); return NULL; }                                                 \
-    if((sf)->in.size == 0 && use_zlib) SET_ZLIB_BUFFER(sf,DEFAULT_BUFSIZE);    \
-    if(use_zlib) sf->read = sf->in.size > 0 ? sread_gz_buf : sread_gz;         \
-    else         sf->read = sf->in.size > 0 ? sread_f_buf  : sread_f;          \
+    if(sf->in.size > 0 && (sf->in.b = (char*)malloc(sf->in.size)) == NULL) {   \
+      free(sf); return NULL;                                                   \
+    }                                                                          \
+    if((sf)->in.size == 0 && use_zlib) { SET_ZLIB_BUFFER(sf,DEFAULT_BUFSIZE); }\
+    if(use_zlib) { sf->read = sf->in.size > 0 ? sread_gz_buf : sread_gz; }     \
+    else         { sf->read = sf->in.size > 0 ? sread_f_buf  : sread_f; }      \
   } while(0)
 
 // Can only be used for plain,fasta,fastq (+gzip) formats
