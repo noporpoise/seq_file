@@ -199,11 +199,15 @@ static inline void seq_read_destroy(read_t *r)
     sf->path = sf->in.b = NULL;                                                \
   } while(0)
 
+// I have removed gzbuffer for now since it causes linking errors on systems
+// that are not set up properly.  Feel free to uncomment and remove empty
+// definition
 #if defined(ZLIB_VERNUM) && ZLIB_VERNUM >= 0x1240
-#define SET_ZLIB_BUFFER(sf,s) gzbuffer((sf)->gz_file, DEFAULT_BUFSIZE)
+//#define SET_ZLIB_BUFFER(sf,s) gzbuffer((sf)->gz_file, DEFAULT_BUFSIZE)
+#define SET_ZLIB_BUFFER(sf,s)
 #else
-#define SET_ZLIB_BUFFER(sf,s) do{} while(0)
-#endif                                                                     
+#define SET_ZLIB_BUFFER(sf,s)
+#endif
 
 #define seq_setup(sf,use_zlib,buf_size) do \
   {                                                                            \

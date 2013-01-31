@@ -1,5 +1,5 @@
 ifdef HTSLIB
-	MARGS=HTSLIB=$(HTSLIB)
+	MARGS=HTSLIB=$(shell readlink -f $(HTSLIB))
 endif
 
 all: tools benchmarks dev

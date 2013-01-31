@@ -176,10 +176,12 @@ void _init_plain_fasta_fastq(SeqFile *sf)
       return;
     }
 
+    // I have removed gzbuffer for now since it causes linking errors on systems
+    // that are not set up properly.  Feel free to uncomment
     #ifdef ZLIB_VERNUM
       #if (ZLIB_VERNUM > 0x1240)
         // Set buffer size to 1Mb
-        gzbuffer(sf->gz_file, (unsigned int)1024*1024);
+        //gzbuffer(sf->gz_file, (unsigned int)1024*1024);
       #endif
     #endif
   }

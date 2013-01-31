@@ -17,12 +17,14 @@ ifndef HTS_PATH
 endif
 
 # Argments passed to makefile can only be changed with override
-override HTS_PATH := $(HTS_PATH)/htslib/
+override HTS_PATH := $(shell readlink -f $(HTS_PATH))
+
+HTS_LIB_PATH := $(HTS_PATH)/htslib/
 
 LIB_STRING_BUF=$(STRING_BUF_PATH)/libstrbuf.a
-LIB_HTS=$(HTS_PATH)/libhts.a
+LIB_HTS=$(HTS_LIB_PATH)/libhts.a
 
-CFLAGS := $(CFLAGS) -Wall -Wextra -I $(HTS_PATH) -I $(STRING_BUF_PATH)
+CFLAGS := $(CFLAGS) -Wall -Wextra -I $(HTS_LIB_PATH) -I $(STRING_BUF_PATH)
 
 LIB_FLAGS := $(LIB_STRING_BUF) $(LIB_HTS) -lpthread -lz -lm
 
@@ -36,7 +38,7 @@ all: clean $(OBJS)
 	ar -csru libseqfile.a $(OBJS)
 	$(CC) -o seq_convert $(CFLAGS) seq_convert.c libseqfile.a $(LIB_FLAGS)
 	$(CC) -o seq_file_test $(CFLAGS) seq_file_test.c libseqfile.a $(LIB_FLAGS)
-	cd new_api; make HTS_PATH=$(HTS_PATH)
+	cd new_api; make HTSLIB=$(HTS_PATH)
 
 clean:
 	rm -rf $(OBJS) libseqfile.a seq_convert seq_file_test \
