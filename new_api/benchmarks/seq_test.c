@@ -11,4 +11,5 @@ int main(int argc, char **argv)
     printf("%s\t[%lu,%lu,%lu]\n", r->name.b, r->name.end, r->seq.end, r->qual.end);
   seq_close(f);
   seq_read_destroy(r);
+  return EXIT_SUCCESS;
 }

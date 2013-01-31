@@ -41,4 +41,6 @@ int main(int argc, char **argv)
 
   seq_close(f);
   seq_read_destroy(r);
+
+  return EXIT_SUCCESS;
 }

@@ -2,14 +2,16 @@ ifndef CC
 	CC=gcc
 endif
 
+HTSLIB_ABS=$(shell readlink -f $(HTSLIB))
+
 all: tools benchmarks dev
 
 tools: htslib
-	cd tools; make HTSLIB=`readlink -f $(HTSLIB)`
+	cd tools; make HTSLIB=$(HTSLIB_ABS)
 benchmarks: htslib
-	cd benchmarks; make HTSLIB=`readlink -f $(HTSLIB)`
+	cd benchmarks; make HTSLIB=$(HTSLIB_ABS)
 dev: htslib
-	cd dev; make HTSLIB=`readlink -f $(HTSLIB)`
+	cd dev; make HTSLIB=$(HTSLIB_ABS)
 
 htslib:
 	if [[ '$(HTSLIB)' == '' ]]; \

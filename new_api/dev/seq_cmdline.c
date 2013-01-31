@@ -31,4 +31,6 @@ int main(int argc, char **argv)
 
   seq_close(file);
   seq_read_destroy(read);
+
+  return EXIT_SUCCESS;
 }

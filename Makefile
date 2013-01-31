@@ -18,7 +18,7 @@ all: htslib string_buffer clean $(OBJS)
 	ar -csru libseqfile.a $(OBJS)
 	$(CC) -o seq_convert $(CFLAGS) seq_convert.c libseqfile.a $(LIB_FLAGS)
 	$(CC) -o seq_file_test $(CFLAGS) seq_file_test.c libseqfile.a $(LIB_FLAGS)
-	cd new_api; make HTSLIB=`readlink -f $(HTS_PATH)`
+	cd new_api; make HTSLIB=$(shell readlink -f $(HTS_PATH))
 
 htslib:
 	if [[ '$(HTS_PATH)' == '' ]]; \
