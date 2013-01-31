@@ -1,22 +1,24 @@
-ifndef HTSLIB
-	HTSLIB=$(HOME)/bioinf/htslib/
+ifndef CC
+	CC=gcc
 endif
-# Argments passed to makefile can only be changed with override
-override HTSLIB:=$(HTSLIB)/htslib/
 
-CFLAGS=-Wall -Wextra -I .. -I $(HTSLIB) -L $(HTSLIB)
+CFLAGS=-Wall -Wextra -I .. -I $(HTSLIB)/htslib/ -L $(HTSLIB)/htslib/
 LINKING=-lhts -lpthread -lz
 
 all: btest seqcmdline seqstat
 
-btest: buffered_input.c ../buffered_input.h
+btest: htslib buffered_input.c ../buffered_input.h
 	$(CC) -O3 -I .. -o btest buffered_input.c -lz
-seqcmdline: seq_cmdline.c ../seq_file.h ../buffered_input.h
+seqcmdline: htslib seq_cmdline.c ../seq_file.h ../buffered_input.h
 	$(CC) -O3 $(CFLAGS) -o seqcmdline seq_cmdline.c $(LINKING)
-seqstat: seq_stat.c ../seq_file.h ../buffered_input.h
+seqstat: htslib seq_stat.c ../seq_file.h ../buffered_input.h
 	$(CC) $(CFLAGS) -o seqstat seq_stat.c $(LINKING)
+
+htslib:
+	if [[ '$(HTSLIB)' == '' ]]; \
+	then echo "Error: Please pass HTSLIB=... with path to htslib"; exit 1; fi
 
 clean:
 	rm -rf btest seqcmdline seqstat
 
-.PHONY: all clean
+.PHONY: all clean htslib

@@ -2,23 +2,21 @@ ifndef CC
 	CC=gcc
 endif
 
-ifndef HTSLIB
-	HTSLIB=$(HOME)/bioinf/htslib/
-endif
-# Argments passed to makefile can only be changed with override
-override HTSLIB:=$(HTSLIB)/htslib/
-
-CFLAGS=-O3 -Wall -Wextra -I .. -I $(HTSLIB) -L $(HTSLIB)
+CFLAGS=-O3 -Wall -Wextra -I .. -I $(HTSLIB)/htslib/ -L $(HTSLIB)/htslib/
 LINKING=-lhts -lpthread -lz
 
 all: ../bin/facat ../bin/fqcat ../bin/seqcat
 
-../bin/facat: ../bin seq_cat.c ../seq_file.h ../buffered_input.h
+../bin/facat: htslib ../bin seq_cat.c ../seq_file.h ../buffered_input.h
 	$(CC) -DFASTA=1 $(CFLAGS) -o ../bin/facat seq_cat.c $(LINKING)
-../bin/fqcat: ../bin seq_cat.c ../seq_file.h ../buffered_input.h
+../bin/fqcat: htslib ../bin seq_cat.c ../seq_file.h ../buffered_input.h
 	$(CC) -DFASTQ=1 $(CFLAGS) -o ../bin/fqcat seq_cat.c $(LINKING)
-../bin/seqcat: ../bin seq_cat.c ../seq_file.h ../buffered_input.h
+../bin/seqcat: htslib ../bin seq_cat.c ../seq_file.h ../buffered_input.h
 	$(CC) -DPLAIN=1 $(CFLAGS) -o ../bin/seqcat seq_cat.c $(LINKING)
+
+htslib:
+	if [[ '$(HTSLIB)' == '' ]]; \
+	then echo "Error: Please pass HTSLIB=... with path to htslib"; exit 1; fi
 
 ../bin:
 	mkdir -p ../bin
@@ -26,4 +24,4 @@ all: ../bin/facat ../bin/fqcat ../bin/seqcat
 clean:
 	rm -rf ../bin/*
 
-.PHONY: all clean
+.PHONY: all clean htslib
