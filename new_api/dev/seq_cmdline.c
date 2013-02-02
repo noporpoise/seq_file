@@ -1,18 +1,18 @@
 #include "seq_file.h"
-SETUP_SEQ_FILE();
 
-#define print_prompt() printf(">"); fflush(stdout)
+#define print_prompt() do { printf("#"); fflush(stdout); } while(0)
 
 int main(int argc, char **argv)
 {
   (void)argv;
 
-  if(argc != 2) {
+  if(argc != 1) {
     fprintf(stderr, "usage: seq_cmdline\n");
     exit(EXIT_FAILURE);
   }
 
-  seq_file_t *file = seq_open_fh(stdin,0,0);
+  print_prompt();
+  seq_file_t *file = seq_open_fh(stdin, 0);
 
   if(file == NULL)
   {
@@ -21,8 +21,7 @@ int main(int argc, char **argv)
   }
 
   read_t *read = seq_read_alloc();
-
-  print_prompt();
+  
   while(seq_read(file, read) > 0)
   {
     printf("%s\n", read->seq.b);

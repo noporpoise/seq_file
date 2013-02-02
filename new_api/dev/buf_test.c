@@ -1,10 +1,12 @@
 #include "buffered_input.h"
 
-BUFFERED_INPUT_SETUP();
-
 int main(int argc, char **argv)
 {
-  if(argc != 2) exit(EXIT_FAILURE);
+  if(argc != 2) {
+    fprintf(stderr, "usage: buf_test <file>\n");
+    fprintf(stderr, "  Prints lines from the file\n");
+    exit(EXIT_FAILURE);
+  }
 
   buffer_t *in = buffer_alloc(10);
   buffer_t *buf = buffer_alloc(10);
@@ -15,7 +17,8 @@ int main(int argc, char **argv)
   int i;
   for(i = 0; freadline_buf(f,in,buf) > 0; i++)
   {
-    printf("line %i: '%s'\n", i, buf->b);
+    printf("line %3i: %s", i, buf->b);
+    buf->begin = buf->end = 0;
   }
 
   fclose(f);

@@ -49,15 +49,15 @@ Opening/closing
 
 Returns a pointer to a new `read_t` struct
 
-    seq_read_destroy(read_t* r)
+    void seq_read_destroy(read_t* r)
 
-`free`s a `read_t` struct
+Free a `read_t` struct
 
-    seq_open(const char *path)
+    seq_file_t* seq_open(const char *path)
 
 Open sequence file pointed to by path.
 
-    seq_open2(const char *path, char sam_bam, char use_gzip, size_t buffer_size)
+    seq_file_t* seq_open2(const char *path, char sam_bam, char use_gzip, size_t buffer_size)
 
 Parameters:
 * `sam_bam`: if 1 opens as sam, if 2 opens as bam
@@ -66,15 +66,22 @@ Parameters:
   the exception of `use_zlib=1` with newer versions of zlib where all input is
   buffered by the zlib library
 
-    seq_open_fh(FILE *file, char use_gzip, size_t buffer_size)
+    seq_file_t* seq_open_fh(FILE *fh, char buffered)
 
 Use a file handle that has already been opened.  Pass `stdin` to read from cmdline,
-pipes etc.  Options are as in `seq_open2`.  Note: seq_open_fh does not currently
-support reading sam/bam files
+pipes etc. If buffered is passed, attempts to read with a gzip stream and a buffer.
+Note: seq_open_fh can only read sam/bam files from stdin at the moment.
 
-    seq_close(seq_file_t *sf)
+    seq_file_t* seq_open_fh2(FILE *fh, char sam,
+                                       char use_zlib, size_t buf_size)
 
-Close a seq_file_t
+Returns pointer to new seq_file_t on success, `seq_close()` will close `fh` so
+you shouldn't call `fclose(fh)`.  Returns `NULL` on error, in which case `fh`
+will not have been closed.
+
+    void seq_close(seq_file_t *sf)
+
+Close a `seq_file_t`
 
 Reading
 -------
@@ -102,11 +109,48 @@ The following require a read to have been read successfully using seq_read:
 Probe a file
 ------------
 
+    int seq_guess_fastq_format(const char *path)
+
+Returns and number between 0 and 5 inclusive. These refer to:
+
+0) Sanger / Illumina 1.9+ (Phred+33) -- this is the most common
+1) Sanger (Phred+33)
+2) Solexa (Solexa+64)
+3) Illumina 1.5+ (Phred+64)
+4) Illumina 1.3+ (Phred+64)
+5) Illumina 1.8+ (Phred+33)
+
+Example usage:
+
+    int fmt = seq_guess_fastq_format("in.fq");
+    printf("in.fq format: %s, offset: %i, min: %i, max: %i, range: [%i,%i]\n",
+           FASTQ_FORMATS[fmt], FASTQ_MIN[fmt], FASTQ_MAX[fmt], FASTQ_OFFSET[fmt],
+           FASTQ_MIN[fmt]-FASTQ_OFFSET[fmt], FASTQ_MAX[fmt]-FASTQ_OFFSET[fmt]);
+
+Outputs:
+
+    in.fq format: Sanger / Illumina 1.9+ (Phred+33), offset: 33, min: 126, max: 33, range: [0,93]
+    in.fq format: Sanger (Phred+33), offset: 33, min: 73, max: 33, range: [0,40]
+    in.fq format: Solexa (Solexa+64), offset: 59, min: 104, max: 64, range: [-5,40]
+    in.fq format: Illumina 1.3+ (Phred+64), offset: 64, min: 104, max: 64, range: [0,40]
+    in.fq format: Illumina 1.5+ (Phred+64), offset: 67, min: 104, max: 64, range: [3,40]
+    in.fq format: Illumina 1.8+ (Phred+33), offset: 33, min: 74, max: 33, range: [0,41]
+
     int seq_get_qual_limits(const char *path, int num, int *minptr, int *maxptr)
 
 `minptr` and `maxptr` are set to the min and max values of the first `num` base
 quality scores.  Returns 0 if no qual scores in the first `num` bases,
 1 on success, -1 if read error.
+
+Writing
+-------
+
+    seq_print_fasta(const read_t *r, FILE *fh, int linewrap)
+    seq_print_fastq(const read_t *r, FILE *fh, int linewrap)
+
+Write a read in FASTA or FASTQ format.  If using FASTQ and the quality score
+and sequence have different lengths, the quality score is shortened or padded
+with '.' to make it the same length as the sequence. 
 
 Useful functions
 ----------------
@@ -132,7 +176,6 @@ Example Code
 Example code to read a file and print as a FASTA file using seq_file.
 
     #include "seq_file.h"
-    SETUP_SEQ_FILE();
 
     int main(int argc, char **argv)
     {
@@ -147,8 +190,8 @@ Example code to read a file and print as a FASTA file using seq_file.
 
       while(seq_read(file, read) > 0)
       {
-        printf(">%s\n", read->name.b, read->name.end);
-        printf("%s\n", read->seq.b, read->seq.end);
+        printf(">%s\n read->name.b);
+        printf("%s\n", read->seq.b);
       }
 
       seq_close(file);

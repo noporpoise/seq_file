@@ -2,26 +2,35 @@ ifndef CC
 	CC=gcc
 endif
 
-CFLAGS=-O3 -Wall -Wextra -I .. -I $(HTSLIB)/htslib/ -L $(HTSLIB)/htslib/
+CFLAGS=-Wall -Wextra -I .. -I $(HTSLIB)/htslib/ -L $(HTSLIB)/htslib/
 LINKING=-lhts -lpthread -lz
 
-all: ../bin/facat ../bin/fqcat ../bin/seqcat
+ifdef DEBUG
+	OPT = -O0 --debug -g
+else
+	OPT = -O3
+endif
 
-../bin/facat: htslib ../bin seq_cat.c ../seq_file.h ../buffered_input.h
-	$(CC) -DFASTA=1 $(CFLAGS) -o ../bin/facat seq_cat.c $(LINKING)
-../bin/fqcat: htslib ../bin seq_cat.c ../seq_file.h ../buffered_input.h
-	$(CC) -DFASTQ=1 $(CFLAGS) -o ../bin/fqcat seq_cat.c $(LINKING)
-../bin/seqcat: htslib ../bin seq_cat.c ../seq_file.h ../buffered_input.h
-	$(CC) -DPLAIN=1 $(CFLAGS) -o ../bin/seqcat seq_cat.c $(LINKING)
+all: ../bin/facat ../bin/fqcat ../bin/seqcat ../bin/seqstat
+
+../bin/facat: seq_cat.c ../seq_file.h ../buffered_input.h | ../bin htslib
+	$(CC) $(OPT) $(CFLAGS) -DFASTA=1 -o ../bin/facat seq_cat.c $(LINKING)
+../bin/fqcat: seq_cat.c ../seq_file.h ../buffered_input.h | ../bin htslib
+	$(CC) $(OPT) $(CFLAGS) -DFASTQ=1 -o ../bin/fqcat seq_cat.c $(LINKING)
+../bin/seqcat: seq_cat.c ../seq_file.h ../buffered_input.h | ../bin htslib
+	$(CC) $(OPT) $(CFLAGS) -DPLAIN=1 -o ../bin/seqcat seq_cat.c $(LINKING)
+
+../bin/seqstat: seq_stat.c ../seq_file.h ../buffered_input.h | ../bin htslib
+	$(CC) $(OPT) $(CFLAGS) -o ../bin/seqstat seq_stat.c $(LINKING)
+
+../bin:
+	mkdir ../bin
 
 htslib:
 	if [[ '$(HTSLIB)' == '' ]]; \
 	then echo "Error: Please pass HTSLIB=... with path to htslib"; exit 1; fi
 
-../bin:
-	mkdir -p ../bin
-
 clean:
-	rm -rf ../bin/*
+	rm -rf ../bin/*  *.dSYM *.greg
 
 .PHONY: all clean htslib

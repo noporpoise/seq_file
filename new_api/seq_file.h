@@ -48,7 +48,21 @@ struct read_t
 // return 1 on success, 0 on eof, -1 if partially read / syntax error
 #define seq_read(sf,r) (sf)->read(sf,r)
 
-// fh could be sam,FASTA,FASTQ,txt (+gzip)
+// File format information (http://en.wikipedia.org/wiki/FASTQ_format)
+static const char * const FASTQ_FORMATS[]
+  = {"Sanger / Illumina 1.9+ (Phred+33)", // range: [0,71] "catch all / unknown"
+     "Sanger (Phred+33)", // range: [0,40]
+     "Solexa (Solexa+64)", // range: [-5,40]
+     "Illumina 1.3+ (Phred+64)", // range: [0,40]
+     "Illumina 1.5+ (Phred+64)", // range: [3,40]
+     "Illumina 1.8+ (Phred+33)"}; // range: [0,41]
+
+static const int FASTQ_MIN[6]    = { 33, 33, 59, 64, 67, 33};
+static const int FASTQ_MAX[6]    = {126, 73,104,104,104, 74};
+static const int FASTQ_OFFSET[6] = { 33, 33, 64, 64, 64, 33};
+
+//
+
 // file could be sam,bam,FASTA,FASTQ,txt (+gzip)
 
 #define DEFAULT_BUFSIZE (1<<20)
@@ -220,30 +234,140 @@ static inline void seq_read_destroy(read_t *r)
     else         { sf->read = sf->in.size > 0 ? sread_f_buf  : sread_f; }      \
   } while(0)
 
-// Can only be used for plain,fasta,fastq (+gzip) formats
-static inline seq_file_t* seq_open_fh(FILE *fh, char use_zlib, size_t buf_size)
+// Guess file type from file path or contents
+#define EXT_ARRLEN 21
+typedef enum { IS_ERROR, IS_UNKNOWN,
+               IS_SEQ, IS_SEQ_GZIP,
+               IS_SAM, IS_BAM } seqtype_t;
+
+static inline seqtype_t _guess_filetype_from_filename(const char *path)
 {
-  seq_file_t *sf = (seq_file_t*)calloc(1, sizeof(seq_file_t));
-  seq_file_init(sf);
-  if(buf_size == 0) sf->f_file = fh;
-  else if((sf->gz_file = gzdopen(fileno(fh), "r")) == NULL) {
-    free(sf);
-    return NULL;
-  }
-  seq_setup(sf, use_zlib, buf_size);
-  sf->path = strdup("-");
-  return sf;
+  size_t plen = strlen(path);
+  const char* exts[EXT_ARRLEN]
+    = {".fa", ".fasta", ".fq", ".fastq", ".txt", ".fz",
+       ".faz", ".fagz", ".fa.gz", ".fa.gzip", ".fasta.gzip", ".fqz", ".fqgz",\
+       ".fq.gz", ".fq.gzip", ".fastq.gzip", ".txtgz", ".txt.gz", ".txt.gzip",\
+       ".sam", ".bam"};
+  const seqtype_t types[EXT_ARRLEN]
+    = {IS_SEQ, IS_SEQ, IS_SEQ, IS_SEQ, IS_SEQ, IS_SEQ_GZIP,
+       IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP,
+       IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP,
+       IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SAM, IS_BAM};
+
+  size_t extlens[EXT_ARRLEN];
+  size_t i;
+  for(i = 0; i < EXT_ARRLEN; i++)
+    extlens[i] = strlen(exts[i]);
+
+  for(i = 0; i < EXT_ARRLEN; i++)
+    if(extlens[i] <= plen && strcasecmp(path+plen-extlens[i], exts[i]) == 0)
+      return types[i];
+
+  return IS_UNKNOWN;
 }
 
-static inline seq_file_t* seq_open2(const char *p, char sam,
+// str should point to a tab character
+static inline char _is_num_column(char *str, char ** ptr)
+{
+  int i;
+  for(i = 1; str[i] >= '0' && str[i] <= '9'; i++);
+  *ptr = str+i;
+  return (i > 1 && str[i] == '\t');
+}
+
+// str should point to a tab character
+static inline char _is_cigar_column(char *str, char ** ptr)
+{
+  int i = 1;
+  if(str[i] == '*' && str[i+1] == '\t') {
+    *ptr = str + 2;
+    return 1;
+  }
+  while(str[i] != '\0') {
+    if(str[i] >= '0' && str[i] <= '9') i++;
+    else return 0;
+    while(str[i] >= '0' && str[i] <= '9') i++;
+    if(strchr("MIDNSHP=X", str[i])) i++;
+    else break;
+  }
+  *ptr = str+i;
+  return (i > 1 && str[i] == '\t');
+}
+
+#define ISUPPER(x) ((x) >= 'A' && (x) <= 'Z')
+
+static inline seqtype_t _guess_filetype_from_content(const char *buf, int len)
+{
+  // printf("buf: '%s'\n", buf);
+  if(len >= 4 && strncmp(buf, "@HD\t", 4) == 0) return IS_SAM;
+  if(len >= 3 && strncmp(buf, "BAM", 3) == 0) return IS_BAM;
+
+  // Test for @UU\tUU: where U is an uppercase char
+  if(buf[0] == '@' && ISUPPER(buf[1]) && ISUPPER(buf[2]) &&
+     buf[3] == '\t' && ISUPPER(buf[4]) && ISUPPER(buf[5])) return IS_SAM;
+
+  // Test for a sam entry with no headers
+  char *tmp = strchr(buf,'\t');
+  if(tmp != NULL) {
+    if(!_is_num_column(tmp, &tmp)) return IS_SEQ;
+    tmp = strchr(tmp+1, '\t');
+    if(!_is_num_column(tmp, &tmp)) return IS_SEQ;
+    if(!_is_num_column(tmp, &tmp)) return IS_SEQ;
+    if(!_is_cigar_column(tmp, &tmp)) return IS_SEQ;
+    return IS_SAM;
+  }
+  return IS_SEQ;
+}
+
+#define GUESS_BUFLEN 1000
+
+static inline seqtype_t _guess_filetype_from_path(const char *path)
+{
+  char buf[GUESS_BUFLEN];
+  gzFile gz = gzopen(path, "r");
+  if(gz == NULL) return IS_ERROR;
+  int len = gzread(gz, buf, GUESS_BUFLEN);
+  gzclose(gz);
+
+  return _guess_filetype_from_content(buf, len);
+}
+
+static inline seqtype_t _guess_filetype_from_fh(FILE *fh)
+{
+  char buf[GUESS_BUFLEN];
+  int c, i, len = 0;
+
+  // Read first line
+  while(len < GUESS_BUFLEN-1 && (c = fgetc(fh)) != -1)
+  {
+    buf[len++] = c;
+    if(c == '\n' || c == '\r') break;
+  }
+  buf[len] = '\0';
+
+  // Unget sequence
+  for(i = len-1; i >= 0 && ungetc(buf[i], fh) != EOF; i--);
+
+  // Check if we were able to restore the buffer to the FILE stream
+  if(i >= 0)
+  {
+    fprintf(stderr, "%s:%c:Error: Cannot push back onto FILE stream\n",
+            __FILE__, __LINE__);
+    exit(EXIT_FAILURE);
+  }
+
+  return _guess_filetype_from_content(buf, len);
+}
+
+static inline seq_file_t* seq_open2(const char *p, char sam_bam,
                                     char use_zlib, size_t buf_size)
 {
   seq_file_t *sf = (seq_file_t*)calloc(1, sizeof(seq_file_t));
   seq_file_init(sf);
 
-  if(sam == 1 || sam == 2)
+  if(sam_bam == 1 || sam_bam == 2)
   {
-    if((sf->s_file = sam_open(p, sam == 1 ? "rs" : "rb", 0)) == NULL) {
+    if((sf->s_file = sam_open(p, sam_bam == 1 ? "rs" : "rb", 0)) == NULL) {
       free(sf);
       return NULL;
     }
@@ -265,85 +389,86 @@ static inline seq_file_t* seq_open2(const char *p, char sam,
   return sf;
 }
 
-// Guess file type from file path or contents
-#define EXT_ARRLEN 21
-typedef enum { IS_ERROR, IS_UNKNOWN,
-               IS_SEQ, IS_SEQ_GZIP,
-               IS_SAM, IS_BAM } filetype_t;
-
-static inline filetype_t _guess_filetype_from_path(const char *path)
+// Returns pointer to new seq_file_t on success, seq_close will close the fh,
+// so you shouldn't call fclose(fh)
+// Returns NULL on error, in which case FILE will not have been closed (caller
+// should then call fclose(fh))
+static inline seq_file_t* seq_open_fh2(FILE *fh, char sam_bam,
+                                       char use_zlib, size_t buf_size)
 {
-  size_t plen = strlen(path);
-  const char* exts[EXT_ARRLEN]
-    = {".fa", ".fasta", ".fq", ".fastq", ".txt", ".fz",
-       ".faz", ".fagz", ".fa.gz", ".fa.gzip", ".fasta.gzip", ".fqz", ".fqgz",\
-       ".fq.gz", ".fq.gzip", ".fastq.gzip", ".txtgz", ".txt.gz", ".txt.gzip",\
-       ".sam", ".bam"};
-  const filetype_t types[EXT_ARRLEN]
-    = {IS_SEQ, IS_SEQ, IS_SEQ, IS_SEQ, IS_SEQ, IS_SEQ_GZIP,
-       IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP,
-       IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP,
-       IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SEQ_GZIP, IS_SAM, IS_BAM};
+  seq_file_t *sf = calloc(1, sizeof(seq_file_t));
+  seq_file_init(sf);
 
-  size_t extlens[EXT_ARRLEN];
-  size_t i;
-  for(i = 0; i < EXT_ARRLEN; i++)
-    extlens[i] = strlen(exts[i]);
+  if(sam_bam == 1 || sam_bam == 2)
+  {
+    fprintf(stderr, "%s:%i:Error: opening SAM/BAM from a FILE stream not "
+                    "implemented yet, sorry\n", __FILE__, __LINE__);
+    free(sf);
+    return NULL;
 
-  for(i = 0; i < EXT_ARRLEN; i++)
-    if(extlens[i] <= plen && strcasecmp(path+plen-extlens[i], exts[i]) == 0)
-      return types[i];
+    /*
+    if((sf->s_file = sam_open("-", sam_bam == 1 ? "rs" : "rb", 0)) == NULL) {
+      free(sf);
+      return NULL;
+    }
+    sf->bam = bam_init1();
+    sf->bam_header = sam_hdr_read(sf->s_file);
+    sf->read = sread_s;
+    */
+  }
+  else
+  {
+    if(!use_zlib) sf->f_file = fh;
+    else if((sf->gz_file = gzdopen(fileno(fh), "r")) == NULL) {
+      free(sf);
+      return NULL;
+    }
+    seq_setup(sf, use_zlib, buf_size);
+  }
 
-  return IS_UNKNOWN;
+  sf->path = strdup("-");
+  return sf;
 }
 
-static inline filetype_t _guess_filetype_from_content(const char *path)
+static inline seq_file_t* seq_open_fh(FILE *fh, char buffered)
 {
-  char buf[20];
-  gzFile gz = gzopen(path, "r");
-  if(gz == NULL) return IS_ERROR;
-  int read = gzread(gz,buf,20);
-  gzclose(gz);
+  seqtype_t type = _guess_filetype_from_fh(fh);
 
-  if(read >= 4 && strncmp(buf, "@HD\t", 4) == 0) return IS_SAM;
-  if(read >= 3 && strncmp(buf, "BAM", 3) == 0) return IS_BAM;
-  if(strchr(buf,'\t') != NULL) return IS_SAM;
-  return strchr("@>acgtn", tolower(buf[0])) != NULL ? IS_SEQ : IS_UNKNOWN;
+  // sam -> 1, bam -> 2, other -> 0
+  char sam_bam = (type == IS_SAM ? 1 : (type == IS_BAM ? 2 : 0));
+
+  char gzip = buffered ? 1 : 0;
+  size_t bufsize = buffered ? DEFAULT_BUFSIZE : 0;
+  return seq_open_fh2(fh, sam_bam, gzip, bufsize);
 }
 
 static inline seq_file_t* seq_open(const char *p)
 {
-  if(strcmp(p,"-") == 0) return seq_open_fh(stdin, 0, 0);
-  filetype_t type = _guess_filetype_from_path(p);
+  if(strcmp(p,"-") == 0) return seq_open_fh(stdin, 0);
+  seqtype_t type = _guess_filetype_from_filename(p);
+
   if(type == IS_UNKNOWN) {
-    type = _guess_filetype_from_content(p);
-    if(type == IS_UNKNOWN) {
-      fprintf(stderr, "Unknown filetype: %s\n", p);
-      fprintf(stderr, "Email turner.isaac@gmail.com to report a bug\n");
-      exit(EXIT_FAILURE);
-    }
-    else if(type == IS_ERROR) return NULL;
+    type = _guess_filetype_from_path(p);
+    if(type == IS_ERROR) return NULL;
   }
-  char sam_bam = 0;
-  char zipped = 1;
-  size_t buf_size = (size_t)DEFAULT_BUFSIZE;
-  if(type == IS_SAM) sam_bam = 1;
-  else if(type == IS_BAM) sam_bam = 2;
-  else if(type == IS_SEQ) zipped = buf_size = 0;
-  return seq_open2(p, sam_bam, zipped, buf_size);
+
+  // sam -> 1, bam -> 2, other -> 0
+  char sam_bam = (type == IS_SAM ? 1 : (type == IS_BAM ? 2 : 0));
+  // Read as gzip file with default buffer size
+  return seq_open2(p, sam_bam, 1, DEFAULT_BUFSIZE);
 }
 
 static inline void seq_close(seq_file_t *sf)
 {
-  if(sf->f_file != NULL) fclose(sf->f_file);
-  else if(sf->gz_file != NULL) gzclose(sf->gz_file);
+  if(sf->f_file != NULL) { fclose(sf->f_file); }
+  else if(sf->gz_file != NULL) { gzclose(sf->gz_file); }
   else if(sf->s_file != NULL)
   {
     sam_close(sf->s_file);
     free(sf->bam);
     free(sf->bam_header);
   }
-  if(sf->in.size != 0) free(sf->in.b);
+  if(sf->in.size != 0) { free(sf->in.b); }
 }
 
 // Get min and max quality values in the first `num` bases of a file.
@@ -378,6 +503,27 @@ static inline int seq_get_qual_limits(const char *path, size_t num,
   return (count > 0);
 }
 
+// Returns -1 on error
+// Returns 0 if not in FASTQ format/ not recognisable (offset:33, min:33, max:104)
+static inline int seq_guess_fastq_format(const char *path)
+{
+  // Detect fastq offset
+  int min_qual = INT_MAX, max_qual = 0;
+
+  // 1000 is the number of quality scores to read
+  if(seq_get_qual_limits(path, 500, &min_qual, &max_qual) <= 0) {
+    return -1;
+  }
+
+  // See: http://en.wikipedia.org/wiki/FASTQ_format
+  if(min_qual >= 33 && max_qual <= 73) return 1; // sanger
+  else if(min_qual >= 33 && max_qual <= 74) return 5; // Illumina 1.8+
+  else if(min_qual >= 67 && max_qual <= 104) return 4; // Illumina 1.5+
+  else if(min_qual >= 64 && max_qual <= 104) return 3; // Illumina 1.3+
+  else if(min_qual >= 59 && max_qual <= 104) return 2; // Solexa
+  else return 0; // Unknown, assume 33 offset max value 104
+}
+
 static inline char _seq_read_looks_valid(read_t *r, const char *alphabet)
 {
   size_t i;
@@ -402,6 +548,55 @@ static inline char _seq_read_looks_valid(read_t *r, const char *alphabet)
 #define seq_read_looks_valid_dna(r) _seq_read_looks_valid(r,"acgtn")
 #define seq_read_looks_valid_rna(r) _seq_read_looks_valid(r,"acgun")
 #define seq_read_looks_valid_protein(r) _seq_read_looks_valid(r,"acdefghiklmnopqrstuvwy")
+
+#define _seq_print_wrap(fh,str,len,wrap,i,j) do { \
+    for(i=0,j=0;i<len;i++,j++) { \
+      if(j==wrap) { putc('\n',(fh)); j = 0; } \
+      putc(str[i],(fh)); \
+    } \
+  } while(0)
+
+static inline void seq_print_fasta(const read_t *r, FILE *fh, int linewrap)
+{
+  if(linewrap == 0) {
+    fprintf(fh, ">%s\n%s\n", r->name.b, r->seq.b);
+  } else
+  {
+    size_t i;
+    int j;
+    fprintf(fh, ">%s\n", r->name.b);
+    _seq_print_wrap(fh, r->seq.b, r->seq.end, linewrap, i, j);
+    putc('\n', fh);
+  }
+}
+
+static inline void seq_print_fastq(const read_t *r, FILE *fh, int linewrap)
+{
+  size_t qlimit = (r->qual.end < r->seq.end ? r->qual.end : r->seq.end);
+  if(linewrap <= 0)
+  {
+    fprintf(fh, "@%s\n%s\n+\n%.*s", r->name.b, r->seq.b, (int)qlimit, r->qual.b);
+    size_t i;
+    for(i = r->qual.end; i < r->seq.end; i++) { putc('.', fh); }
+    putc('\n', fh);
+  }
+  else
+  {
+    size_t i;
+    int j;
+    fprintf(fh, "@%s\n", r->name.b);
+    _seq_print_wrap(fh, r->seq.b, r->seq.end, linewrap, i, j);
+    fprintf(fh, "\n+\n");
+    _seq_print_wrap(fh, r->qual.b, qlimit, linewrap, i, j);
+
+    // If i < seq.end, pad quality scores
+    for(; i < r->seq.end; i++, j++) {
+      if(j == linewrap) { putc('\n', fh); j = 0; }
+      putc('.', fh);
+    }
+    putc('\n', fh);
+  }
+}
 
 #define SETUP_SEQ_FILE()
 

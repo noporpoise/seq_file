@@ -6,8 +6,10 @@
 #define CMDSTR "facat"
 #elif defined(FASTQ)
 #define CMDSTR "fqcat"
-#else
+#elif defined(PLAIN)
 #define CMDSTR "seqcat"
+#else
+#error You must define one of: FASTA FASTQ PLAIN
 #endif
 
 char parse_entire_uint(char *str, size_t *result)
@@ -103,37 +105,12 @@ int main(int argc, char **argv)
       if(change_case == 1) fixcase(r->seq.b,r->seq.end,i,toupper);
       if(change_case == 2) fixcase(r->seq.b,r->seq.end,i,tolower);
 
-      #ifdef FASTQ
-        if(r->qual.end == 0)
-        {
-          buffer_ensure_capacity(&r->qual, r->seq.end);
-          r->qual.end = r->seq.end;
-          memset(r->qual.b,'.',r->qual.end);
-          r->qual.b[r->qual.end] = 0;
-        }
-        if(linewrap == 0)
-        {
-          printf("@%s\n%s\n+\n%s\n", r->name.b, r->seq.b, r->qual.b);
-        }
-        else
-        {
-          size_t j;
-          printf("@%s\n", r->name.b);
-          printwrap(r->seq.b, r->seq.end, linewrap, i, j);
-          printf("+\n");
-          printwrap(r->qual.b, r->qual.end, linewrap, i, j);
-        }
+      #if defined(FASTQ)
+        seq_print_fastq(r, stdout, linewrap);
       #elif defined(FASTA)
-        if(linewrap == 0) printf(">%s\n%s\n", r->name.b, r->seq.b);
-        else
-        {
-          size_t j;
-          printf(">%s\n", r->name.b);
-          printwrap(r->seq.b, r->seq.end, linewrap, i, j);
-        }
-      #else
-        // Plain (sequence only, one per line, no wrap option)
-        printf("%s\n", r->seq.b);
+        seq_print_fasta(r, stdout, linewrap);
+      #elif defined(PLAIN)
+        printf("%s\n", r->seq.b); // sequence only, one per line, no wrap option
       #endif
     }
 
