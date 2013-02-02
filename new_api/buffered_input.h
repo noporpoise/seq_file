@@ -22,7 +22,7 @@ typedef struct
 
 static inline char buffer_init(buffer_t *b, size_t s)
 {
-  if((b->b = (char*)malloc(sizeof(char)*s)) == NULL) return 0;
+  if((b->b = malloc(sizeof(char)*s)) == NULL) return 0;
   b->size = s;
   b->begin = b->end = 0;
   return 1;
@@ -148,19 +148,18 @@ _func_getc_buf(fgetc_buf,FILE*,fread2)
   static inline size_t fname(type_t file, buffer_t *in, buffer_t *buf)         \
   {                                                                            \
     if(in->begin >= in->end) { READ_BUFFER(file,in,__read); }                  \
-    size_t new_buf_len, total_read = 0;                                        \
+    size_t total_read = 0;                                                     \
     while(in->end != 0)                                                        \
     {                                                                          \
       size_t offset = in->begin;                                               \
-      while(offset < in->end) { offset++; if(in->b[offset-1] == '\n') break; } \
-      offset -= in->begin;                                                     \
-      new_buf_len = buf->end+offset;                                           \
-      buffer_ensure_capacity(buf, new_buf_len);                                \
+      while(offset < in->end && in->b[offset++] != '\n');                      \
+      offset -= in->begin; /* offset is now num chars read */                  \
+      buffer_ensure_capacity(buf, buf->end+offset);                            \
       memcpy(buf->b+buf->end, in->b+in->begin, offset);                        \
       buf->end += offset;                                                      \
       in->begin += offset;                                                     \
       total_read += offset;                                                    \
-      if(in->begin < in->end) break;                                           \
+      if(buf->b[buf->end-1] == '\n') break;                                    \
       READ_BUFFER(file,in,__read);                                             \
     }                                                                          \
     buf->b[buf->end] = 0;                                                      \
