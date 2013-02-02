@@ -30,6 +30,7 @@ Also included are some tools that use seq_file:
 * `facat`: print file as FASTA
 * `fqcat`: print file as FASTQ
 * `seqcat`: print file sequence-only one entry per line ('plain' format)
+* `seqstat`: print details about a sequence file
 
 Build
 =====
@@ -111,7 +112,7 @@ Probe a file
 
     int seq_guess_fastq_format(const char *path)
 
-Returns and number between 0 and 5 inclusive. These refer to:
+Returns and number between 0 and 5 inclusive on success. These refer to:
 
 0) Sanger / Illumina 1.9+ (Phred+33) -- this is the most common
 1) Sanger (Phred+33)
@@ -119,6 +120,9 @@ Returns and number between 0 and 5 inclusive. These refer to:
 3) Illumina 1.5+ (Phred+64)
 4) Illumina 1.3+ (Phred+64)
 5) Illumina 1.8+ (Phred+33)
+
+Returns -1 if it cannot read the file or the file has no quality scores (e.g
+it's in FASTA format).
 
 Example usage:
 
@@ -135,6 +139,8 @@ Outputs:
     in.fq format: Illumina 1.3+ (Phred+64), offset: 64, min: 104, max: 64, range: [0,40]
     in.fq format: Illumina 1.5+ (Phred+64), offset: 67, min: 104, max: 64, range: [3,40]
     in.fq format: Illumina 1.8+ (Phred+33), offset: 33, min: 74, max: 33, range: [0,41]
+
+To get highest and lowest quality characters in the first `num` bases:
 
     int seq_get_qual_limits(const char *path, int num, int *minptr, int *maxptr)
 
