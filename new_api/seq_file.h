@@ -549,7 +549,7 @@ static inline char _seq_read_looks_valid(read_t *r, const char *alphabet)
 #define seq_read_looks_valid_rna(r) _seq_read_looks_valid(r,"acgun")
 #define seq_read_looks_valid_protein(r) _seq_read_looks_valid(r,"acdefghiklmnopqrstuvwy")
 
-char _seq_complement(char c) {
+char _seq_char_complement(char c) {
   switch(c) {
     case 'a': return 't'; case 'A': return 'T';
     case 'c': return 'g'; case 'C': return 'G';
@@ -563,7 +563,7 @@ char _seq_complement(char c) {
 static inline void seq_read_reverse_complement(read_t *r)
 {
   if(r->seq.end == 1) {
-    r->seq.b[0] = _seq_complement(r->seq.b[0]);
+    r->seq.b[0] = _seq_char_complement(r->seq.b[0]);
     return;
   }
 
@@ -571,8 +571,8 @@ static inline void seq_read_reverse_complement(read_t *r)
   char swap;
   for(i=0, j=r->seq.end-1; i <= j; i++, j--) {
     swap = r->seq.b[i];
-    r->seq.b[i] = _seq_complement(r->seq.b[j]);
-    r->seq.b[j] = _seq_complement(swap);
+    r->seq.b[i] = _seq_char_complement(r->seq.b[j]);
+    r->seq.b[j] = _seq_char_complement(swap);
   }
   if(r->qual.end <= 1) return;
   for(i=0, j=r->qual.end-1; i <= j; i++, j--) {
