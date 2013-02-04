@@ -39,8 +39,10 @@ void print_usage(const char *err)
     #endif
 
     fprintf(stderr, "\n  OPTIONS:\n");
-    #if defined(FASTA) || defined(FASTQ)
-    fprintf(stderr, "   -w <n>  wrap lines by <n> characters\n");
+    #if defined(FASTA)
+    fprintf(stderr, "   -w <n>  wrap lines by <n> characters [default: 80]\n");
+    #elif defined(FASTQ)
+    fprintf(stderr, "   -w <n>  wrap lines by <n> characters [default: 0 (off)]\n");
     #endif
     fprintf(stderr, "   -uc     convert sequence to uppercase\n");
     fprintf(stderr, "   -lc     convert sequence to lowercase\n");
@@ -48,13 +50,6 @@ void print_usage(const char *err)
   }
   exit(EXIT_FAILURE);
 }
-
-#define printwrap(str,len,wrap,i,j) do { \
-    for(i=0,j=0;i<len;i++,j++) { \
-      if(j==wrap) { putc('\n',stdout); j = 0; } \
-      putc(str[i],stdout); \
-    } putc('\n',stdout); \
-  } while(0)
 
 #define fixcase(str,len,i,func) do { \
     for((i)=0; (i)<(len); (i)++) (str)[(i)] = func((str)[(i)]); \
@@ -66,7 +61,9 @@ int main(int argc, char **argv)
   // change case: 0 => don't, 1 => uppercase, 2 => lowercase
   int argi, change_case = 0;
 
-  #if defined(FASTA) || defined(FASTQ)
+  #if defined(FASTA)
+  size_t linewrap = 80;
+  #elif defined(FASTQ)
   size_t linewrap = 0;
   #endif
 

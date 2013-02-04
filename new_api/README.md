@@ -92,6 +92,10 @@ Reading
 Read a read from the file into `r`.
 Returns 1 on success, 0 on eof, -1 if partially read / syntax error
 
+    void seq_read_reverse_complement(read_t *r)
+
+Reverse complement a read. If the read has quality scores, they are also reversed. 
+
 File status
 -----------
 

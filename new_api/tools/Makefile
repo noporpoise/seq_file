@@ -11,7 +11,7 @@ else
 	OPT = -O3
 endif
 
-all: ../bin/facat ../bin/fqcat ../bin/seqcat ../bin/seqstat
+all: ../bin/facat ../bin/fqcat ../bin/seqcat ../bin/seqstat ../bin/seqrevcmpl
 
 ../bin/facat: seq_cat.c ../seq_file.h ../buffered_input.h | ../bin htslib
 	$(CC) $(OPT) $(CFLAGS) -DFASTA=1 -o ../bin/facat seq_cat.c $(LINKING)
@@ -22,6 +22,9 @@ all: ../bin/facat ../bin/fqcat ../bin/seqcat ../bin/seqstat
 
 ../bin/seqstat: seq_stat.c ../seq_file.h ../buffered_input.h | ../bin htslib
 	$(CC) $(OPT) $(CFLAGS) -o ../bin/seqstat seq_stat.c $(LINKING)
+
+../bin/seqrevcmpl: seq_revcmpl.c ../seq_file.h ../buffered_input.h | ../bin htslib
+	$(CC) $(OPT) $(CFLAGS) -o ../bin/seqrevcmpl seq_revcmpl.c $(LINKING)
 
 ../bin:
 	mkdir ../bin
