@@ -549,7 +549,7 @@ static inline char _seq_read_looks_valid(read_t *r, const char *alphabet)
 #define seq_read_looks_valid_rna(r) _seq_read_looks_valid(r,"acgun")
 #define seq_read_looks_valid_protein(r) _seq_read_looks_valid(r,"acdefghiklmnopqrstuvwy")
 
-char _seq_char_complement(char c) {
+static inline char _seq_char_complement(char c) {
   switch(c) {
     case 'a': return 't'; case 'A': return 'T';
     case 'c': return 'g'; case 'C': return 'G';
