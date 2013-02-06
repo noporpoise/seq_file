@@ -534,7 +534,7 @@ static inline char _seq_read_looks_valid(read_t *r, const char *alphabet)
       char b = tolower(r->seq.b[i]);
       char q = r->qual.b[i];
       if(strchr(alphabet, b) == NULL) return 0;
-      if(q < 33 || q > 104) return 0;
+      if(q < 33 || q > 105) return 0;
     }
   }
   else {

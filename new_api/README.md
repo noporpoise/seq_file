@@ -172,8 +172,8 @@ Useful functions
 Check that a read looks valid.  Returns 1 if it appears valid, 0 otherwise.
 A read is *invalid* if it has:
 * an invalid sequence character
-* quality scores but of a different length the sequence
-* a quality score that is `<33` or `>104`
+* quality scores but of a different length than the sequence
+* a quality score that is `<33` or `>105`
 
 Valid sequence characters are (upper and lower case are valid):
 * DNA: ACGTN
