@@ -516,11 +516,12 @@ static inline int seq_guess_fastq_format(const char *path)
   }
 
   // See: http://en.wikipedia.org/wiki/FASTQ_format
-  if(min_qual >= 33 && max_qual <= 73) return 1; // sanger
-  else if(min_qual >= 33 && max_qual <= 74) return 5; // Illumina 1.8+
-  else if(min_qual >= 67 && max_qual <= 104) return 4; // Illumina 1.5+
-  else if(min_qual >= 64 && max_qual <= 104) return 3; // Illumina 1.3+
-  else if(min_qual >= 59 && max_qual <= 104) return 2; // Solexa
+  // Usually expect 0,40, but new software can report 41, so using <= MAX+1
+  if(min_qual >= 33 && max_qual <= 74) return 1; // sanger
+  else if(min_qual >= 33 && max_qual <= 75) return 5; // Illumina 1.8+
+  else if(min_qual >= 67 && max_qual <= 105) return 4; // Illumina 1.5+
+  else if(min_qual >= 64 && max_qual <= 105) return 3; // Illumina 1.3+
+  else if(min_qual >= 59 && max_qual <= 105) return 2; // Solexa
   else return 0; // Unknown, assume 33 offset max value 104
 }
 
