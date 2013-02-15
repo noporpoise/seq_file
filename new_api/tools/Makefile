@@ -30,7 +30,7 @@ all: ../bin/facat ../bin/fqcat ../bin/seqcat ../bin/seqstat ../bin/seqrevcmpl
 	mkdir ../bin
 
 htslib:
-	if [[ '$(HTSLIB)' == '' ]]; \
+	@if [[ '$(HTSLIB)' == '' ]]; \
 	then echo "Error: Please pass HTSLIB=... with path to htslib"; exit 1; fi
 
 clean:

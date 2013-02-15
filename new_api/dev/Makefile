@@ -19,7 +19,7 @@ seqcmdline: seq_cmdline.c ../seq_file.h ../buffered_input.h | htslib
 	$(CC) $(OPT) $(CFLAGS) -o seqcmdline seq_cmdline.c $(LINKING)
 
 htslib:
-	if [[ '$(HTSLIB)' == '' ]]; \
+	@if [[ '$(HTSLIB)' == '' ]]; \
 	then echo "Error: Please pass HTSLIB=... with path to htslib"; exit 1; fi
 
 clean:

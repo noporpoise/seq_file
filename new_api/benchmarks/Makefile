@@ -19,7 +19,7 @@ ktest: ktest.c | htslib
 	$(CC) $(OPT) $(CFLAGS) -I$(HTS) -o ktest ktest.c -lz
 
 htslib:
-	if [[ '$(HTSLIB)' == '' ]]; \
+	@if [[ '$(HTSLIB)' == '' ]]; \
 	then echo "Error: Please pass HTSLIB=... with path to htslib"; exit 1; fi
 
 clean:
