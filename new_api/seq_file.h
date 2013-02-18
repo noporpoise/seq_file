@@ -22,7 +22,6 @@ struct seq_file_t
   FILE *f_file;
   gzFile gz_file;
   samFile *s_file;
-  bam1_t *bam;
   bam_hdr_t *bam_header;
   int (*read)(seq_file_t *sf, read_t *r);
   buffer_t in;
@@ -32,6 +31,7 @@ struct seq_file_t
 struct read_t
 {
   buffer_t name, seq, qual;
+  bam1_t *bam;
 };
 
 #define seq_is_bam(sf) ((sf)->s_file != NULL && (sf)->s_file->is_bin)
@@ -77,19 +77,19 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
   buffer_terminate(&(read->seq));
   buffer_terminate(&(read->qual));
 
-  if(sam_read1(sf->s_file, sf->bam_header, sf->bam) < 0) return 0;
+  if(sam_read1(sf->s_file, sf->bam_header, read->bam) < 0) return 0;
 
-  char *str = bam_get_qname(sf->bam);
+  char *str = bam_get_qname(read->bam);
   buffer_append_str(&read->name, str);
 
-  size_t qlen = sf->bam->core.l_qseq;
+  size_t qlen = read->bam->core.l_qseq;
   buffer_ensure_capacity(&read->seq, qlen);
   buffer_ensure_capacity(&read->qual, qlen);
-  uint8_t *bamseq = bam_get_seq(sf->bam);
-  uint8_t *bamqual = bam_get_qual(sf->bam);
+  uint8_t *bamseq = bam_get_seq(read->bam);
+  uint8_t *bamqual = bam_get_qual(read->bam);
 
   size_t i, j;
-  if(bam_is_rev(sf->bam))
+  if(bam_is_rev(read->bam))
   {
     for(i = 0, j = qlen - 1; i < qlen; i++, j--)
     {
@@ -100,7 +100,7 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
   }
   else
   {
-    for(i = 0, j = qlen - 1; i < qlen; i++, j--)
+    for(i = 0; i < qlen; i++)
     {
       int8_t b = bam_seqi(bamseq, i);
       read->seq.b[i] = seq_nt16_str[b];
@@ -108,8 +108,9 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
     }
   }
 
-  read->seq.end = qlen;
-  read->qual.end = qlen;
+  read->seq.end = read->qual.end = qlen;
+  read->seq.b[qlen] = read->qual.b[qlen] = 0;
+
   return 1;
 }
 
@@ -193,6 +194,7 @@ static inline read_t* seq_read_alloc()
   buffer_init(&r->name, 512);
   buffer_init(&r->seq, DEFAULT_BUFSIZE);
   buffer_init(&r->qual, DEFAULT_BUFSIZE);
+  r->bam = bam_init1();
   return r;
 }
 
@@ -201,6 +203,7 @@ static inline void seq_read_destroy(read_t *r)
   free(r->name.b);
   free(r->seq.b);
   free(r->qual.b);
+  free(r->bam);
   free(r);
 }
 
@@ -371,7 +374,6 @@ static inline seq_file_t* seq_open2(const char *p, char sam_bam,
       free(sf);
       return NULL;
     }
-    sf->bam = bam_init1();
     sf->bam_header = sam_hdr_read(sf->s_file);
     sf->read = sread_s;
   }
@@ -411,7 +413,6 @@ static inline seq_file_t* seq_open_fh2(FILE *fh, char sam_bam,
       free(sf);
       return NULL;
     }
-    sf->bam = bam_init1();
     sf->bam_header = sam_hdr_read(sf->s_file);
     sf->read = sread_s;
     */
@@ -465,7 +466,6 @@ static inline void seq_close(seq_file_t *sf)
   else if(sf->s_file != NULL)
   {
     sam_close(sf->s_file);
-    free(sf->bam);
     free(sf->bam_header);
   }
   if(sf->in.size != 0) { free(sf->in.b); }
