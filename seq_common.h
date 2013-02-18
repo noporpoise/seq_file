@@ -31,6 +31,9 @@
 
 #include "seq_file.h"
 
+// t_buf_pos dropped from latest string_buffer API
+typedef size_t t_buf_pos;
+
 // Printed nothing, then name, then some sequence, then some qualities
 // ... then ready to print a name again
 typedef enum WriteState
@@ -110,9 +113,9 @@ struct SeqFile
   ? strbuf_readline((sbuf), (seq)->plain_file) \
   : strbuf_gzreadline((sbuf), (seq)->gz_file))
 
-#define seq_skip_line(seq) ((seq)->plain_file != NULL \
-  ? strbuf_skip_line((seq)->plain_file) \
-  : strbuf_gzskip_line((seq)->gz_file))
+#define seq_skipline(seq) ((seq)->plain_file != NULL \
+  ? strbuf_skipline((seq)->plain_file) \
+  : strbuf_gzskipline((seq)->gz_file))
 
 #define MIN(x,y) ((x) <= (y) ? (x) : (y))
 

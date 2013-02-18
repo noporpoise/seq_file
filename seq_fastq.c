@@ -48,7 +48,7 @@ void _seq_read_fastq_sequence(SeqFile *sf)
   // Read to end of separator line
   if(c != '\r' && c != '\n')
   {
-    seq_skip_line(sf);
+    seq_skipline(sf);
     sf->line_number++;
   }
 }
@@ -153,7 +153,7 @@ char seq_read_all_bases_fastq(SeqFile *sf, StrBuf *sbuf)
 {
   // Copy from buffer
   t_buf_pos len = sf->bases_buff->len - sf->entry_offset;
-  strbuf_copy(sbuf, 0, sf->bases_buff, sf->entry_offset, len);
+  strbuf_copy(sbuf, 0, sf->bases_buff->buff + sf->entry_offset, len);
 
   return 1;
 }
