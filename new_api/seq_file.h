@@ -32,6 +32,7 @@ struct read_t
 {
   buffer_t name, seq, qual;
   bam1_t *bam;
+  char from_sam; // from sam or bam
 };
 
 #define seq_is_bam(sf) ((sf)->s_file != NULL && (sf)->s_file->is_bin)
@@ -110,6 +111,7 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
 
   read->seq.end = read->qual.end = qlen;
   read->seq.b[qlen] = read->qual.b[qlen] = 0;
+  read->from_sam = 1;
 
   return 1;
 }
@@ -118,6 +120,7 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
   static inline int fname(seq_file_t *sf, read_t *read)                        \
   {                                                                            \
     read->name.end = read->seq.end = read->qual.end = 0;                       \
+    read->from_sam = 0;                                                        \
     buffer_terminate(&(read->name));                                           \
     buffer_terminate(&(read->seq));                                            \
     buffer_terminate(&(read->qual));                                           \
@@ -195,6 +198,7 @@ static inline read_t* seq_read_alloc()
   buffer_init(&r->seq, DEFAULT_BUFSIZE);
   buffer_init(&r->qual, DEFAULT_BUFSIZE);
   r->bam = bam_init1();
+  r->from_sam = 0;
   return r;
 }
 
