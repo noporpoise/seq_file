@@ -27,11 +27,11 @@ all: htslib string_buffer $(OBJS)
 	cd new_api; make $(NEW_API_ARGS)
 
 htslib:
-	if [[ '$(HTS_PATH)' == '' ]]; \
+	@if [[ '$(HTS_PATH)' == '' ]]; \
 	then echo "Error: Please pass HTS_PATH=... with path to htslib dir"; exit 1; fi
 
 string_buffer:
-	if [[ '$(STRING_BUF_PATH)' == '' ]]; \
+	@if [[ '$(STRING_BUF_PATH)' == '' ]]; \
 	then echo "Error: Please pass STRING_BUF_PATH=... with path to string_buffer dir"; exit 1; fi
 
 clean:

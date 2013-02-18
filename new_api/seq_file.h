@@ -73,9 +73,9 @@ static const int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 9, 14,
 static inline int sread_s(seq_file_t *sf, read_t *read)
 {
   read->name.end = read->seq.end = read->qual.end = 0;
-  buffer_terminate(read->name);
-  buffer_terminate(read->seq);
-  buffer_terminate(read->qual);
+  buffer_terminate(&(read->name));
+  buffer_terminate(&(read->seq));
+  buffer_terminate(&(read->qual));
 
   if(sam_read1(sf->s_file, sf->bam_header, sf->bam) < 0) return 0;
 
@@ -117,9 +117,9 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
   static inline int fname(seq_file_t *sf, read_t *read)                        \
   {                                                                            \
     read->name.end = read->seq.end = read->qual.end = 0;                       \
-    buffer_terminate(read->name);                                              \
-    buffer_terminate(read->seq);                                               \
-    buffer_terminate(read->qual);                                              \
+    buffer_terminate(&(read->name));                                           \
+    buffer_terminate(&(read->seq));                                            \
+    buffer_terminate(&(read->qual));                                           \
                                                                                \
     int c;                                                                     \
     sf->headc = (sf->nextc != -1 ? sf->nextc : __getc(sf));                    \
@@ -128,34 +128,34 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
     else if(sf->headc == '@')                                                  \
     {                                                                          \
       if(__readline(sf, read->name) == 0) return -1;                           \
-      buffer_chomp(read->name);                                                \
+      buffer_chomp(&(read->name));                                             \
                                                                                \
       while((c = __getc(sf)) != '+') {                                         \
         if(c == -1) return -1;                                                 \
         if(c != '\r' && c != '\n') {                                           \
           buffer_append_char(&read->seq,c);                                    \
           if(__readline(sf, read->seq) == 0) return -1;                        \
-          buffer_chomp(read->seq);                                             \
+          buffer_chomp(&(read->seq));                                          \
         }                                                                      \
       }                                                                        \
       while((c = __getc(sf)) != -1 && c != '\n');                              \
       if(c == -1) return -1;                                                   \
       do {                                                                     \
-        if(__readline(sf,read->qual) > 0) buffer_chomp(read->qual);            \
+        if(__readline(sf,read->qual) > 0) buffer_chomp(&(read->qual));         \
         else return 1;                                                         \
       } while(read->qual.end < read->seq.end);                                 \
     }                                                                          \
     else if(sf->headc == '>')                                                  \
     {                                                                          \
       if(__readline(sf, read->name) == 0) return -1;                           \
-      buffer_chomp(read->name);                                                \
+      buffer_chomp(&(read->name));                                             \
                                                                                \
       while((c = __getc(sf)) != '>') {                                         \
         if(c == -1) return 1;                                                  \
         if(c != '\r' && c != '\n') {                                           \
           buffer_append_char(&read->seq,c);                                    \
           size_t r = __readline(sf, read->seq);                                \
-          buffer_chomp(read->seq);                                             \
+          buffer_chomp(&(read->seq));                                          \
           if(r == 0) return 1;                                                 \
         }                                                                      \
       }                                                                        \
@@ -165,7 +165,7 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
     else {                                                                     \
       buffer_append_char(&read->seq, sf->headc);                               \
       __readline(sf, read->seq);                                               \
-      buffer_chomp(read->seq);                                                 \
+      buffer_chomp(&(read->seq));                                              \
     }                                                                          \
     return 1;                                                                  \
   }
@@ -176,10 +176,10 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
 #define _sf_fgetc(sf)               fgetc(sf->f_file)
 #define _sf_fgetc_buf(sf)           fgetc_buf(sf->f_file,&sf->in)
 
-#define _sf_gzreadline(sf,buf)      gzreadline(sf->gz_file,&buf)
-#define _sf_gzreadline_buf(sf,buf)  gzreadline_buf(sf->gz_file,&sf->in,&buf)
-#define _sf_freadline(sf,buf)       freadline(sf->f_file,&buf)
-#define _sf_freadline_buf(sf,buf)   freadline_buf(sf->f_file,&sf->in,&buf)
+#define _sf_gzreadline(sf,buf)      gzreadline(sf->gz_file,&buf.b,&buf.end,&buf.size)
+#define _sf_gzreadline_buf(sf,buf)  gzreadline_buf(sf->gz_file,&sf->in,&buf.b,&buf.end,&buf.size)
+#define _sf_freadline(sf,buf)       freadline(sf->f_file,&buf.b,&buf.end,&buf.size)
+#define _sf_freadline_buf(sf,buf)   freadline_buf(sf->f_file,&sf->in,&buf.b,&buf.end,&buf.size)
 
 _func_read(sread_gz_buf, _sf_gzgetc_buf, _sf_gzreadline_buf)
 _func_read(sread_gz,     _sf_gzgetc,     _sf_gzreadline)
