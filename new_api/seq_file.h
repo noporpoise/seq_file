@@ -148,6 +148,8 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
         if(__readline(sf,read->qual) > 0) buffer_chomp(&(read->qual));         \
         else return 1;                                                         \
       } while(read->qual.end < read->seq.end);                                 \
+      while((c = __getc(sf)) != -1 && c != '@');                               \
+      sf->nextc = c;                                                           \
     }                                                                          \
     else if(sf->headc == '>')                                                  \
     {                                                                          \
@@ -163,7 +165,6 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
           if(r == 0) return 1;                                                 \
         }                                                                      \
       }                                                                        \
-                                                                               \
       sf->nextc = c;                                                           \
     }                                                                          \
     else {                                                                     \
