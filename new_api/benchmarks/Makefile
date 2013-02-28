@@ -2,6 +2,9 @@ ifndef CC
 	CC=gcc
 endif
 
+# Use bash as shell
+SHELL := /bin/bash
+
 HTS=$(HTSLIB)/htslib/
 CFLAGS=-Wall -Wextra
 

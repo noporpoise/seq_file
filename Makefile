@@ -8,6 +8,9 @@ else
 	CFLAGS := -O3
 endif
 
+# Use bash as shell
+SHELL := /bin/bash
+
 CFLAGS := $(CFLAGS) -Wall -Wextra -I $(HTS_PATH)/htslib/ -I $(STRING_BUF_PATH)
 LIB_FLAGS = -L $(HTS_PATH)/htslib/ -L $(STRING_BUF_PATH) -lstrbuf -lhts -lpthread -lz -lm
 OBJS = seq_file.o seq_common.o seq_fasta.o seq_fastq.o seq_plain.o seq_sam.o
