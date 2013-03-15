@@ -123,7 +123,7 @@ char seq_read_all_bases_fasta(SeqFile *sf, StrBuf *sbuf)
   return 1;
 }
 
-unsigned long seq_file_write_name_fasta(SeqFile *sf, const char *name)
+size_t seq_file_write_name_fasta(SeqFile *sf, const char *name)
 {
   size_t num_bytes_printed = 0;
 

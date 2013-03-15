@@ -190,9 +190,9 @@ char seq_read_all_quals_fastq(SeqFile *sf, StrBuf *sbuf)
   return 1;
 }
 
-unsigned long seq_file_write_name_fastq(SeqFile *sf, const char *name)
+size_t seq_file_write_name_fastq(SeqFile *sf, const char *name)
 {
-  unsigned long num_bytes_printed = 0;
+  size_t num_bytes_printed = 0;
 
   if(sf->write_state == WS_BEGIN)
   {
