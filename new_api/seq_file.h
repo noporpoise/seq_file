@@ -4,6 +4,7 @@
 
 #include <ctype.h>
 #include <string.h>
+#include <strings.h> // strcasecmp
 #include <stdlib.h>
 #include <stdio.h>
 #include <limits.h>
