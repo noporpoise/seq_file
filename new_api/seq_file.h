@@ -2,11 +2,11 @@
 #ifndef _SEQ_FILE_HEADER
 #define _SEQ_FILE_HEADER
 
-#include <ctype.h>
-#include <string.h>
-#include <strings.h> // strcasecmp
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+#include <strings.h> // strcasecmp
+#include <ctype.h>
 #include <limits.h>
 #include <zlib.h>
 
