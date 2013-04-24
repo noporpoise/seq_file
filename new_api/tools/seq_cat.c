@@ -12,14 +12,14 @@
 #error You must define one of: FASTA FASTQ PLAIN
 #endif
 
-char parse_entire_uint(char *str, size_t *result)
+char parse_entire_uint(char *str, uint32_t *result)
 {
   char *tmp_str = str;
   long tmp = strtol(str, &tmp_str, 10);
 
   if(tmp > UINT_MAX || tmp < 0 || tmp_str != str+strlen(str)) return 0;
 
-  *result = (int)tmp;
+  *result = (uint32_t)tmp;
   return 1;
 }
 
@@ -28,7 +28,7 @@ void print_usage(const char *err)
   if(err != NULL) fprintf(stderr, "%s: %s\n", CMDSTR, err);
   else
   {
-    fprintf(stderr, "Usage: %s [OPTIONS] <file1> [file2] ..\n", CMDSTR);
+    fprintf(stderr, "Usage: %s [OPTIONS] [file1] [file2] ..\n", CMDSTR);
 
     #if defined(FASTA)
     fprintf(stderr, "  Print files in FASTA format\n");
@@ -55,16 +55,44 @@ void print_usage(const char *err)
     for((i)=0; (i)<(len); (i)++) (str)[(i)] = func((str)[(i)]); \
   } while(0)
 
+static void seq_cat(const char *file, read_t *r,
+                    uint32_t change_case, uint32_t linewrap)
+{
+  seq_file_t *f;
+  size_t i;
+
+  if((f = seq_open(file)) == NULL) {
+    fprintf(stderr, "Cannot open file %s\n", file);
+    exit(EXIT_FAILURE);
+  }
+
+  while(seq_read(f,r) > 0)
+  {
+    if(change_case == 1) fixcase(r->seq.b, r->seq.end, i, toupper);
+    if(change_case == 2) fixcase(r->seq.b, r->seq.end, i, tolower);
+
+    #if defined(FASTQ)
+      seq_print_fastq(r, stdout, linewrap);
+    #elif defined(FASTA)
+      seq_print_fasta(r, stdout, linewrap);
+    #elif defined(PLAIN)
+      (void)linewrap;
+      printf("%s\n", r->seq.b); // sequence only, one per line, no wrap option
+    #endif
+  }
+
+  seq_close(f);
+}
+
 int main(int argc, char **argv)
 {
   // linewrap: 0 => don't
   // change case: 0 => don't, 1 => uppercase, 2 => lowercase
-  int argi, change_case = 0;
+  uint32_t change_case = 0, linewrap = 0;
+  int argi;
 
   #if defined(FASTA)
-  size_t linewrap = 80;
-  #elif defined(FASTQ)
-  size_t linewrap = 0;
+  linewrap = 80;
   #endif
 
   for(argi = 1; argi < argc; argi++)
@@ -79,40 +107,15 @@ int main(int argc, char **argv)
     #endif
     if(strcasecmp(argv[argi], "-uc") == 0) change_case = 1;
     else if(strcasecmp(argv[argi], "-lc") == 0) change_case = 2;
-    else if(strcasecmp(argv[argi], "-h") == 0) print_usage(NULL);
+    else if(argv[argi][0] == '-' && argv[argi][1] != '\0') print_usage(NULL);
     else break;
   }
 
-  if(argi == argc) print_usage(NULL);
-
   read_t *r = seq_read_alloc();
-  seq_file_t *f;
 
-  for(; argi < argc; argi++)
-  {
-    if((f = seq_open(argv[argi])) == NULL)
-    {
-      fprintf(stderr, "Cannot open file %s\n", argv[argi]);
-      exit(EXIT_FAILURE);
-    }
+  if(argi == argc) seq_cat("-", r, change_case, linewrap);
+  else { for(; argi < argc; argi++) seq_cat(argv[argi], r, change_case, linewrap); }
 
-    size_t i;
-    while(seq_read(f,r) > 0)
-    {
-      if(change_case == 1) fixcase(r->seq.b,r->seq.end,i,toupper);
-      if(change_case == 2) fixcase(r->seq.b,r->seq.end,i,tolower);
-
-      #if defined(FASTQ)
-        seq_print_fastq(r, stdout, linewrap);
-      #elif defined(FASTA)
-        seq_print_fasta(r, stdout, linewrap);
-      #elif defined(PLAIN)
-        printf("%s\n", r->seq.b); // sequence only, one per line, no wrap option
-      #endif
-    }
-
-    seq_close(f);
-  }
   seq_read_destroy(r);
 
   return EXIT_SUCCESS;
