@@ -569,23 +569,35 @@ static inline char _seq_char_complement(char c) {
 
 static inline void seq_read_reverse_complement(read_t *r)
 {
-  if(r->seq.end == 1) {
-    r->seq.b[0] = _seq_char_complement(r->seq.b[0]);
-    return;
-  }
-
   size_t i, j;
   char swap;
+
+  if(r->qual.end > 0)
+  {
+    // Force quality score length to match seq length
+    if(r->qual.end < r->seq.end) {
+      buffer_ensure_capacity(&(r->qual), r->seq.end);
+      for(i = r->qual.end; i < r->seq.end; i++) r->qual.b[i] = '.';
+    }
+    r->qual.b[r->qual.end = r->seq.end] = '\0';
+  }
+
+  if(r->seq.end == 0) return;
+  if(r->seq.end == 1){ r->seq.b[0] = _seq_char_complement(r->seq.b[0]); return; }
+
   for(i=0, j=r->seq.end-1; i <= j; i++, j--) {
     swap = r->seq.b[i];
     r->seq.b[i] = _seq_char_complement(r->seq.b[j]);
     r->seq.b[j] = _seq_char_complement(swap);
   }
-  if(r->qual.end <= 1) return;
-  for(i=0, j=r->qual.end-1; i <= j; i++, j--) {
-    swap = r->qual.b[i];
-    r->qual.b[i] = r->qual.b[j];
-    r->qual.b[j] = swap;
+
+  if(r->qual.end > 0)
+  {
+    for(i=0, j=r->qual.end-1; i <= j; i++, j--) {
+      swap = r->qual.b[i];
+      r->qual.b[i] = r->qual.b[j];
+      r->qual.b[j] = swap;
+    }
   }
 }
 

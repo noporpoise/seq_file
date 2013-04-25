@@ -2,15 +2,11 @@
 #include <ctype.h> // toupper tolower
 #include "seq_file.h"
 
-#if defined(FASTA)
-#define CMDSTR "facat"
-#elif defined(FASTQ)
-#define CMDSTR "fqcat"
-#elif defined(PLAIN)
-#define CMDSTR "seqcat"
-#else
-#error You must define one of: FASTA FASTQ PLAIN
+#if !defined(FASTA) && !defined(FASTQ) && !defined(PLAIN) && !defined(REVCMP)
+#error You must define one of: FASTA FASTQ PLAIN REVCMP
 #endif
+
+char *cmdstr;
 
 char parse_entire_uint(char *str, uint32_t *result)
 {
@@ -25,23 +21,25 @@ char parse_entire_uint(char *str, uint32_t *result)
 
 void print_usage(const char *err)
 {
-  if(err != NULL) fprintf(stderr, "%s: %s\n", CMDSTR, err);
+  if(err != NULL) fprintf(stderr, "%s: %s\n", cmdstr, err);
   else
   {
-    fprintf(stderr, "Usage: %s [OPTIONS] [file1] [file2] ..\n", CMDSTR);
+    fprintf(stderr, "Usage: %s [OPTIONS] [file1] [file2] ..\n", cmdstr);
 
     #if defined(FASTA)
     fprintf(stderr, "  Print files in FASTA format\n");
     #elif defined(FASTQ)
     fprintf(stderr, "  Print files in FASTQ format\n");
-    #else
+    #elif defined(PLAIN)
     fprintf(stderr, "  Print files in 'plain' format -- one sequence per line\n");
+    #elif defined(REVCMP)
+    fprintf(stderr, "  Print files with reads reverse complemented\n");
     #endif
 
     fprintf(stderr, "\n  OPTIONS:\n");
     #if defined(FASTA)
     fprintf(stderr, "   -w <n>  wrap lines by <n> characters [default: 80]\n");
-    #elif defined(FASTQ)
+    #elif defined(FASTQ) || defined(REVCMP)
     fprintf(stderr, "   -w <n>  wrap lines by <n> characters [default: 0 (off)]\n");
     #endif
     fprintf(stderr, "   -uc     convert sequence to uppercase\n");
@@ -71,7 +69,13 @@ static void seq_cat(const char *file, read_t *r,
     if(change_case == 1) fixcase(r->seq.b, r->seq.end, i, toupper);
     if(change_case == 2) fixcase(r->seq.b, r->seq.end, i, tolower);
 
-    #if defined(FASTQ)
+    #if defined(REVCMP)
+      seq_read_reverse_complement(r);
+      if(seq_is_fastq(f) || seq_is_sam(f) || seq_is_bam(f))
+        seq_print_fastq(r, stdout, linewrap);
+      else if(seq_is_plain(f)) puts(r->seq.b);
+      else seq_print_fasta(r, stdout, linewrap);
+    #elif defined(FASTQ)
       seq_print_fastq(r, stdout, linewrap);
     #elif defined(FASTA)
       seq_print_fasta(r, stdout, linewrap);
@@ -86,6 +90,8 @@ static void seq_cat(const char *file, read_t *r,
 
 int main(int argc, char **argv)
 {
+  cmdstr = argv[0];
+
   // linewrap: 0 => don't
   // change case: 0 => don't, 1 => uppercase, 2 => lowercase
   uint32_t change_case = 0, linewrap = 0;
@@ -97,7 +103,7 @@ int main(int argc, char **argv)
 
   for(argi = 1; argi < argc; argi++)
   {
-    #if defined(FASTA) || defined(FASTQ)
+    #if defined(FASTA) || defined(FASTQ) || defined(REVCMP)
     if(strcasecmp(argv[argi], "-w") == 0)
     {
       if(argi == argc-1) print_usage("-w <n> requires an argument");
