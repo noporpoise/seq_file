@@ -608,7 +608,7 @@ static inline void seq_read_reverse_complement(read_t *r)
   }                                                                            \
 
 _seq_print_fasta(seq_print_fasta,FILE*,fprintf,fputc2)
-_seq_print_fasta(seq_gzprint_fasta,gzFile,fprintf,gzputc2)
+_seq_print_fasta(seq_gzprint_fasta,gzFile,gzprintf,gzputc2)
 
 #define _seq_print_fastq(fname,ftype,_printf,_putc)                            \
     static inline void fname(const read_t *r, ftype fh, int linewrap) {        \
