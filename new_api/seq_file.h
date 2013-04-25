@@ -589,54 +589,52 @@ static inline void seq_read_reverse_complement(read_t *r)
   }
 }
 
-#define _seq_print_wrap(fh,str,len,wrap,i,j) do { \
+#define _seq_print_wrap(fh,str,len,wrap,i,j,_putc) do { \
     for(i=0,j=0;i<len;i++,j++) { \
-      if(j==wrap) { putc('\n',(fh)); j = 0; } \
-      putc(str[i],(fh)); \
+      if(j==wrap) { _putc((fh),'\n'); j = 0; } \
+      _putc((fh),str[i]); \
     } \
   } while(0)
 
-static inline void seq_print_fasta(const read_t *r, FILE *fh, int linewrap)
-{
-  if(linewrap == 0) {
-    fprintf(fh, ">%s\n%s\n", r->name.b, r->seq.b);
-  } else
-  {
-    size_t i;
-    int j;
-    fprintf(fh, ">%s\n", r->name.b);
-    _seq_print_wrap(fh, r->seq.b, r->seq.end, linewrap, i, j);
-    putc('\n', fh);
-  }
-}
+#define _seq_print_fasta(fname,ftype,_printf,_putc)                            \
+  static inline void fname(const read_t *r, ftype fh, int linewrap) {          \
+    if(linewrap == 0)  _printf(fh, ">%s\n%s\n", r->name.b, r->seq.b);          \
+    else {                                                                     \
+      size_t i; int j;                                                         \
+      _printf(fh, ">%s\n", r->name.b);                                         \
+      _seq_print_wrap(fh, r->seq.b, r->seq.end, linewrap, i, j, _putc);        \
+      _putc(fh, '\n');                                                         \
+    }                                                                          \
+  }                                                                            \
 
-static inline void seq_print_fastq(const read_t *r, FILE *fh, int linewrap)
-{
-  size_t qlimit = (r->qual.end < r->seq.end ? r->qual.end : r->seq.end);
-  if(linewrap <= 0)
-  {
-    fprintf(fh, "@%s\n%s\n+\n%.*s", r->name.b, r->seq.b, (int)qlimit, r->qual.b);
-    size_t i;
-    for(i = r->qual.end; i < r->seq.end; i++) { putc('.', fh); }
-    putc('\n', fh);
-  }
-  else
-  {
-    size_t i;
-    int j;
-    fprintf(fh, "@%s\n", r->name.b);
-    _seq_print_wrap(fh, r->seq.b, r->seq.end, linewrap, i, j);
-    fprintf(fh, "\n+\n");
-    _seq_print_wrap(fh, r->qual.b, qlimit, linewrap, i, j);
+_seq_print_fasta(seq_print_fasta,FILE*,fprintf,fputc2)
+_seq_print_fasta(seq_gzprint_fasta,gzFile,fprintf,gzputc2)
 
-    // If i < seq.end, pad quality scores
-    for(; i < r->seq.end; i++, j++) {
-      if(j == linewrap) { putc('\n', fh); j = 0; }
-      putc('.', fh);
-    }
-    putc('\n', fh);
+#define _seq_print_fastq(fname,ftype,_printf,_putc)                            \
+    static inline void fname(const read_t *r, ftype fh, int linewrap) {        \
+    size_t i, qlimit = (r->qual.end < r->seq.end ? r->qual.end : r->seq.end);  \
+    int j;                                                                     \
+    if(linewrap <= 0) {                                                        \
+      _printf(fh, "@%s\n%s\n+\n%.*s",r->name.b,r->seq.b,(int)qlimit,r->qual.b);\
+      for(i = r->qual.end; i < r->seq.end; i++) { _putc(fh, '.'); }            \
+      _putc(fh, '\n');                                                         \
+    }                                                                          \
+    else {                                                                     \
+      _printf(fh, "@%s\n", r->name.b);                                         \
+      _seq_print_wrap(fh, r->seq.b, r->seq.end, linewrap, i, j, _putc);        \
+      _printf(fh, "\n+\n");                                                    \
+      _seq_print_wrap(fh, r->qual.b, qlimit, linewrap, i, j, _putc);           \
+      /* If i < seq.end, pad quality scores */                                 \
+      for(; i < r->seq.end; i++, j++) {                                        \
+        if(j == linewrap) { _putc(fh, '\n'); j = 0; }                          \
+        _putc(fh, '.');                                                        \
+      }                                                                        \
+      _putc(fh, '\n');                                                         \
+    }                                                                          \
   }
-}
+
+_seq_print_fastq(seq_print_fastq,FILE*,fprintf,fputc2)
+_seq_print_fastq(seq_gzprint_fastq,gzFile,gzprintf,gzputc2)
 
 #define SETUP_SEQ_FILE()
 

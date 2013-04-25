@@ -157,6 +157,8 @@ Writing
 
     seq_print_fasta(const read_t *r, FILE *fh, int linewrap)
     seq_print_fastq(const read_t *r, FILE *fh, int linewrap)
+    seq_gzprint_fasta(const read_t *r, gzFile gz, int linewrap)
+    seq_gzprint_fastq(const read_t *r, gzFile gz, int linewrap)
 
 Write a read in FASTA or FASTQ format.  If using FASTQ and the quality score
 and sequence have different lengths, the quality score is shortened or padded
