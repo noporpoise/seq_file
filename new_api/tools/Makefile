@@ -16,16 +16,16 @@ endif
 
 all: ../bin/facat ../bin/fqcat ../bin/seqcat ../bin/seqstat ../bin/revcmp
 
-../bin/facat: seq_cat.c ../seq_file.h ../buffered_input.h | ../bin htslib
+../bin/facat: seq_cat.c ../seq_file.h ../stream_buffer.h | ../bin htslib
 	$(CC) $(OPT) $(CFLAGS) -DFASTA=1 -o ../bin/facat seq_cat.c $(LINKING)
-../bin/fqcat: seq_cat.c ../seq_file.h ../buffered_input.h | ../bin htslib
+../bin/fqcat: seq_cat.c ../seq_file.h ../stream_buffer.h | ../bin htslib
 	$(CC) $(OPT) $(CFLAGS) -DFASTQ=1 -o ../bin/fqcat seq_cat.c $(LINKING)
-../bin/seqcat: seq_cat.c ../seq_file.h ../buffered_input.h | ../bin htslib
+../bin/seqcat: seq_cat.c ../seq_file.h ../stream_buffer.h | ../bin htslib
 	$(CC) $(OPT) $(CFLAGS) -DPLAIN=1 -o ../bin/seqcat seq_cat.c $(LINKING)
-../bin/revcmp: seq_cat.c ../seq_file.h ../buffered_input.h | ../bin htslib
+../bin/revcmp: seq_cat.c ../seq_file.h ../stream_buffer.h | ../bin htslib
 	$(CC) $(OPT) $(CFLAGS) -DREVCMP=1 -o ../bin/revcmp seq_cat.c $(LINKING)
 
-../bin/seqstat: seq_stat.c ../seq_file.h ../buffered_input.h | ../bin htslib
+../bin/seqstat: seq_stat.c ../seq_file.h ../stream_buffer.h | ../bin htslib
 	$(CC) $(OPT) $(CFLAGS) -o ../bin/seqstat seq_stat.c $(LINKING)
 
 ../bin:

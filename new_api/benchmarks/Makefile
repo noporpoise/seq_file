@@ -16,7 +16,7 @@ endif
 
 all: seqtest ktest
 
-seqtest: seq_test.c ../seq_file.h ../buffered_input.h | htslib
+seqtest: seq_test.c ../seq_file.h ../stream_buffer.h | htslib
 	$(CC) $(OPT) $(CFLAGS) -I.. -I$(HTS) -L$(HTS) -o seqtest seq_test.c -lhts -lpthread -lz
 ktest: ktest.c | htslib
 	$(CC) $(OPT) $(CFLAGS) -I$(HTS) -o ktest ktest.c -lz

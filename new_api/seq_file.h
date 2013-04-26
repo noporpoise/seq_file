@@ -12,7 +12,7 @@
 
 #include "hts.h"
 #include "sam.h"
-#include "buffered_input.h"
+#include "stream_buffer.h"
 
 typedef struct seq_file_t seq_file_t;
 typedef struct read_t read_t;

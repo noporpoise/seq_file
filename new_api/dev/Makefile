@@ -16,7 +16,7 @@ endif
 
 all: seqcmdline
 
-seqcmdline: seq_cmdline.c ../seq_file.h ../buffered_input.h | htslib
+seqcmdline: seq_cmdline.c ../seq_file.h ../stream_buffer.h | htslib
 	$(CC) $(OPT) $(CFLAGS) -o seqcmdline seq_cmdline.c $(LINKING)
 
 htslib:
