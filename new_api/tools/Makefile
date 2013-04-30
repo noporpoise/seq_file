@@ -14,7 +14,8 @@ else
 	OPT = -O3
 endif
 
-all: ../bin/facat ../bin/fqcat ../bin/seqcat ../bin/seqstat ../bin/revcmp
+all: ../bin/facat ../bin/fqcat ../bin/seqcat ../bin/seqstat \
+	   ../bin/revcmp ../bin/seqrnd
 
 ../bin/facat: seq_cat.c ../seq_file.h ../stream_buffer.h | ../bin htslib
 	$(CC) $(OPT) $(CFLAGS) -DFASTA=1 -o ../bin/facat seq_cat.c $(LINKING)
@@ -24,6 +25,9 @@ all: ../bin/facat ../bin/fqcat ../bin/seqcat ../bin/seqstat ../bin/revcmp
 	$(CC) $(OPT) $(CFLAGS) -DPLAIN=1 -o ../bin/seqcat seq_cat.c $(LINKING)
 ../bin/revcmp: seq_cat.c ../seq_file.h ../stream_buffer.h | ../bin htslib
 	$(CC) $(OPT) $(CFLAGS) -DREVCMP=1 -o ../bin/revcmp seq_cat.c $(LINKING)
+
+../bin/seqrnd: seq_rnd.c
+	$(CC) $(OPT) $(CFLAGS) -o ../bin/seqrnd seq_rnd.c
 
 ../bin/seqstat: seq_stat.c ../seq_file.h ../stream_buffer.h | ../bin htslib
 	$(CC) $(OPT) $(CFLAGS) -o ../bin/seqstat seq_stat.c $(LINKING)
