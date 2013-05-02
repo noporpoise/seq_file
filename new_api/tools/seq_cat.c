@@ -107,7 +107,7 @@ int main(int argc, char **argv)
     if(strcasecmp(argv[argi], "-w") == 0)
     {
       if(argi == argc-1) print_usage("-w <n> requires an argument");
-      if(!parse_entire_uint(argv[++argi], &linewrap) || linewrap <= 0)
+      if(!parse_entire_uint(argv[++argi], &linewrap))
         print_usage("invalid -w argument");
     } else
     #endif

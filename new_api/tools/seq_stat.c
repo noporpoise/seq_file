@@ -36,7 +36,7 @@ int main(int argc, char **argv)
     return -1;
   }
 
-  const char *zstr = " (read with zlib)";
+  const char zstr[] = " (read with zlib)";
 
   if(seq_is_sam(f)) printf("Format: SAM\n");
   if(seq_is_bam(f)) printf("Format: BAM\n");
