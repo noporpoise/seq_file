@@ -114,7 +114,8 @@ The following require a read to have been read successfully using seq_read:
 Probe a file
 ------------
 
-    int seq_guess_fastq_format(const char *path)
+    int seq_guess_fastq_format(const char *path, int max_read_bases,
+                               int *min_qual, int *max_qual)
 
 Returns and number between 0 and 5 inclusive on success. These refer to:
 

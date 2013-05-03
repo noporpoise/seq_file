@@ -318,7 +318,7 @@ static inline void seq_read_destroy(read_t *r)
 static inline seqtype_t _guess_filetype_from_filename(const char *path)
 {
   size_t plen = strlen(path);
-  const char* exts[EXT_ARRLEN]
+  const char *exts[EXT_ARRLEN]
     = {".fa", ".fasta", ".fsa", ".fsa.gz", "fsa.gzip", // FASTA
        ".faz", ".fagz", ".fa.gz", ".fa.gzip", ".fastaz", ".fasta.gzip",
        ".fq", ".fastq", ".fsq", ".fsq.gz", "fsq.gzip", // FASTQ
@@ -327,10 +327,10 @@ static inline seqtype_t _guess_filetype_from_filename(const char *path)
        ".sam", ".bam"}; // SAM / BAM
 
   const seqtype_t types[EXT_ARRLEN]
-    = {IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA,
-       IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA,
+    = {IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA,
+       IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA,
+       IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ,
        IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ,
-       IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ,
        IS_PLAIN, IS_PLAIN, IS_PLAIN, IS_PLAIN,
        IS_SAM, IS_BAM};
 
@@ -595,23 +595,25 @@ static inline int seq_get_qual_limits(const char *path, size_t num,
 
 // Returns -1 on error
 // Returns 0 if not in FASTQ format/ not recognisable (offset:33, min:33, max:104)
-static inline int seq_guess_fastq_format(const char *path)
+// max_read_bases is the number of quality scores to read
+static inline int seq_guess_fastq_format(const char *path, int max_read_bases,
+                                         int *min_qual, int *max_qual)
 {
   // Detect fastq offset
-  int min_qual = INT_MAX, max_qual = 0;
+  *min_qual = INT_MAX;
+  *max_qual = 0;
 
-  // 1000 is the number of quality scores to read
-  if(seq_get_qual_limits(path, 500, &min_qual, &max_qual) <= 0) {
+  if(seq_get_qual_limits(path, max_read_bases, min_qual, max_qual) <= 0) {
     return -1;
   }
 
   // See: http://en.wikipedia.org/wiki/FASTQ_format
   // Usually expect 0,40, but new software can report 41, so using <= MAX+1
-  if(min_qual >= 33 && max_qual <= 74) return 1; // sanger
-  else if(min_qual >= 33 && max_qual <= 75) return 5; // Illumina 1.8+
-  else if(min_qual >= 67 && max_qual <= 105) return 4; // Illumina 1.5+
-  else if(min_qual >= 64 && max_qual <= 105) return 3; // Illumina 1.3+
-  else if(min_qual >= 59 && max_qual <= 105) return 2; // Solexa
+  if(*min_qual >= 33 && *max_qual <= 74) return 1; // sanger
+  else if(*min_qual >= 33 && *max_qual <= 75) return 5; // Illumina 1.8+
+  else if(*min_qual >= 67 && *max_qual <= 105) return 4; // Illumina 1.5+
+  else if(*min_qual >= 64 && *max_qual <= 105) return 3; // Illumina 1.3+
+  else if(*min_qual >= 59 && *max_qual <= 105) return 2; // Solexa
   else return 0; // Unknown, assume 33 offset max value 104
 }
 

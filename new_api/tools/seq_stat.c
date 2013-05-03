@@ -51,13 +51,12 @@ int main(int argc, char **argv)
 
   if(print_qstat)
   {
-    int fmt = seq_guess_fastq_format(file);
+    int minq = -1, maxq = -1;
+    int fmt = seq_guess_fastq_format(file, 500, &minq, &maxq);
     printf("Quality scores: %s, offset: %i, min: %i, max: %i, scores: [%i,%i]\n",
            FASTQ_FORMATS[fmt], FASTQ_OFFSET[fmt], FASTQ_MIN[fmt], FASTQ_MAX[fmt],
            FASTQ_MIN[fmt]-FASTQ_OFFSET[fmt], FASTQ_MAX[fmt]-FASTQ_OFFSET[fmt]);
-  
-    int minq = -1, maxq = -1;
-    seq_get_qual_limits(file, 500, &minq, &maxq);
+
     printf("Quality ASCII range in first 500bp: [%i,%i]\n", minq, maxq);
   }
 
