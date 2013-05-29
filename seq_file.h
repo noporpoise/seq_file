@@ -261,9 +261,9 @@ _func_read_unknown(_seq_read_unknown_f_buf,  _sf_fgetc,  _sf_fskipline,  _seq_re
 _func_read_unknown(_seq_read_unknown_gz_buf, _sf_gzgetc, _sf_gzskipline, _seq_read_fastq_gz_buf, _seq_read_fasta_gz_buf, _seq_read_plain_gz_buf)
 
 // Create and destroy read structs
-static inline read_t* seq_read_alloc()
+
+static inline read_t* seq_read_alloc(read_t *r)
 {
-  read_t *r = calloc(1, sizeof(read_t));
   buffer_init(&r->name, 512);
   buffer_init(&r->seq, DEFAULT_BUFSIZE);
   buffer_init(&r->qual, DEFAULT_BUFSIZE);
@@ -272,12 +272,23 @@ static inline read_t* seq_read_alloc()
   return r;
 }
 
-static inline void seq_read_destroy(read_t *r)
+static inline void seq_read_dealloc(read_t *r)
 {
   free(r->name.b);
   free(r->seq.b);
   free(r->qual.b);
   free(r->bam);
+}
+
+static inline read_t* seq_read_new()
+{
+  read_t *r = calloc(1, sizeof(read_t));
+  return seq_read_alloc(r);
+}
+
+static inline void seq_read_free(read_t *r)
+{
+  seq_read_dealloc(r);
   free(r);
 }
 
@@ -568,22 +579,24 @@ static inline int seq_get_qual_limits(const char *path, size_t num,
 {
   seq_file_t *sf = seq_open(path);
   if(sf == NULL) return -1;
-  read_t *r = seq_read_alloc();
+  read_t r;
+  seq_read_alloc(&r);
   int i, limit, min = INT_MAX, max = 0;
   size_t count = 0;
 
-  while(count < num && seq_read(sf,r))
+  while(count < num && seq_read(sf,&r))
   {
-    limit = (r->qual.end < num-count ? r->qual.end : num-count);
+    limit = (r.qual.end < num-count ? r.qual.end : num-count);
     for(i = 0; i < limit; i++)
     {
-      char q = r->qual.b[i];
+      char q = r.qual.b[i];
       if(q > max) max = q;
       if(q < min) min = q;
     }
     count += limit;
   }
 
+  seq_read_dealloc(&r);
   seq_close(sf);
 
   if(count > 0) {
@@ -735,8 +748,13 @@ _seq_print_fastq(seq_gzprint_fastq,gzFile,gzprintf,gzputc2)
 
 #define SETUP_SEQ_FILE()
 
-// read_t* seq_read_alloc()
-// seq_read_destroy(read_t* r)
+// New read on the stack
+// read_t* seq_read_alloc(read_t*)
+// seq_read_dealloc(read_t* r)
+
+// New read on the heap
+// read_t* seq_read_new()
+// seq_read_free(read_t* r)
 
 // seq_open(path)
 // seq_open2(path,sam_bam,use_gzip,buffer_size)

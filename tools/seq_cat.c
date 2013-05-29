@@ -117,12 +117,17 @@ int main(int argc, char **argv)
     else break;
   }
 
-  read_t *r = seq_read_alloc();
+  read_t r;
+  seq_read_alloc(&r);
 
-  if(argi == argc) seq_cat("-", r, change_case, linewrap);
-  else { for(; argi < argc; argi++) seq_cat(argv[argi], r, change_case, linewrap); }
+  if(argi == argc)
+    seq_cat("-", &r, change_case, linewrap);
+  else {
+    for(; argi < argc; argi++)
+      seq_cat(argv[argi], &r, change_case, linewrap);
+  }
 
-  seq_read_destroy(r);
+  seq_read_dealloc(&r);
 
   return EXIT_SUCCESS;
 }

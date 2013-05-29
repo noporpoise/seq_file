@@ -20,7 +20,7 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  read_t *read = seq_read_alloc();
+  read_t *read = seq_read_new();
   
   while(seq_read(file, read) > 0)
   {
@@ -29,7 +29,7 @@ int main(int argc, char **argv)
   }
 
   seq_close(file);
-  seq_read_destroy(read);
+  seq_read_free(read);
 
   return EXIT_SUCCESS;
 }

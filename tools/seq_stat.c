@@ -15,7 +15,8 @@ int main(int argc, char **argv)
 
   printf("File: %s\n", file);
 
-  read_t *r = seq_read_alloc();
+  read_t r;
+  seq_read_alloc(&r);
   seq_file_t *f = seq_open(file);
 
   if(f == NULL)
@@ -24,7 +25,7 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  int s = seq_read(f,r);
+  int s = seq_read(f,&r);
 
   if(s < 0) {
     printf("Error occurred reading file\n");
@@ -47,7 +48,7 @@ int main(int argc, char **argv)
   char print_qstat = (seq_is_fastq(f) || seq_is_sam(f) || seq_is_bam(f));
 
   seq_close(f);
-  seq_read_destroy(r);
+  seq_read_dealloc(&r);
 
   if(print_qstat)
   {
