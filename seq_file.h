@@ -699,6 +699,17 @@ static inline void seq_read_reverse_complement(read_t *r)
   }
 }
 
+// Formally, FASTA/Q entry names stop at the first space character
+// Truncates read name and returns new length
+static inline size_t seq_read_truncate_name(read_t *r)
+{
+  char *tmp = r->name.b;
+  size_t len;
+  for(len = 0; tmp[len] != '\0' && !isspace(tmp[len]); len++) {}
+  r->name.b[r->name.end = len] = '\0';
+  return len;
+}
+
 #define _seq_print_wrap(fh,str,len,wrap,i,j,_putc) do { \
     for(i=0,j=0;i<len;i++,j++) { \
       if(j==wrap) { _putc((fh),'\n'); j = 0; } \

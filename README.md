@@ -168,6 +168,11 @@ with '.' to make it the same length as the sequence.
 Useful functions
 ----------------
 
+    static inline size_t seq_read_truncate_name(read_t *r)
+
+Formally, FASTA/Q entry names stop at the first space character. 
+This function truncates the read name and returns new length
+
     seq_read_looks_valid_dna(read_t *r)
     seq_read_looks_valid_rna(read_t *r)
     seq_read_looks_valid_protein(read_t *r)
