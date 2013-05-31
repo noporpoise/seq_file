@@ -6,6 +6,9 @@
 #error You must define one of: FASTA FASTQ PLAIN REVCMP
 #endif
 
+#define UPPERCASE 1
+#define LOWERCASE 2
+
 char *cmdstr;
 
 char parse_entire_uint(char *str, uint32_t *result)
@@ -49,15 +52,10 @@ void print_usage(const char *err)
   exit(EXIT_FAILURE);
 }
 
-#define fixcase(str,len,i,func) do { \
-    for((i)=0; (i)<(len); (i)++) (str)[(i)] = func((str)[(i)]); \
-  } while(0)
-
 static void seq_cat(const char *file, read_t *r,
                     uint32_t change_case, uint32_t linewrap)
 {
   seq_file_t *f;
-  size_t i;
 
   if((f = seq_open(file)) == NULL) {
     fprintf(stderr, "Cannot open file %s\n", file);
@@ -66,8 +64,8 @@ static void seq_cat(const char *file, read_t *r,
 
   while(seq_read(f,r) > 0)
   {
-    if(change_case == 1) fixcase(r->seq.b, r->seq.end, i, toupper);
-    if(change_case == 2) fixcase(r->seq.b, r->seq.end, i, tolower);
+    if(change_case == UPPERCASE) seq_read_to_uppercase(r);
+    if(change_case == LOWERCASE) seq_read_to_lowercase(r);
 
     #if defined(REVCMP)
       seq_read_reverse_complement(r);
@@ -93,7 +91,7 @@ int main(int argc, char **argv)
   cmdstr = argv[0];
 
   // linewrap: 0 => don't
-  // change case: 0 => don't, 1 => uppercase, 2 => lowercase
+  // change case: 0 [don't], 1 [UPPERCASE], 2 [LOWERCASE]
   uint32_t change_case = 0, linewrap = 0;
   int argi;
 
@@ -111,8 +109,8 @@ int main(int argc, char **argv)
         print_usage("invalid -w argument");
     } else
     #endif
-    if(strcasecmp(argv[argi], "-uc") == 0) change_case = 1;
-    else if(strcasecmp(argv[argi], "-lc") == 0) change_case = 2;
+    if(strcasecmp(argv[argi], "-uc") == 0) change_case = UPPERCASE;
+    else if(strcasecmp(argv[argi], "-lc") == 0) change_case = LOWERCASE;
     else if(argv[argi][0] == '-' && argv[argi][1] != '\0') print_usage(NULL);
     else break;
   }

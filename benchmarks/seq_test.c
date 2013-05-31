@@ -1,5 +1,4 @@
 #include "seq_file.h"
-SETUP_SEQ_FILE();
 
 int main(int argc, char **argv)
 {

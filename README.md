@@ -173,6 +173,12 @@ Useful functions
 Formally, FASTA/Q entry names stop at the first space character. 
 This function truncates the read name and returns new length
 
+    static inline void seq_read_to_uppercase(read_t *r)
+    static inline void seq_read_to_lowercase(read_t *r)
+
+Convert read sequence to upper or lower case.  Does not affect read name or
+quality scores.
+
     seq_read_looks_valid_dna(read_t *r)
     seq_read_looks_valid_rna(read_t *r)
     seq_read_looks_valid_protein(read_t *r)

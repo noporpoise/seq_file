@@ -653,7 +653,8 @@ static inline char _seq_read_looks_valid(read_t *r, const char *alphabet)
 
 #define seq_read_looks_valid_dna(r) _seq_read_looks_valid(r,"acgtn")
 #define seq_read_looks_valid_rna(r) _seq_read_looks_valid(r,"acgun")
-#define seq_read_looks_valid_protein(r) _seq_read_looks_valid(r,"acdefghiklmnopqrstuvwy")
+#define seq_read_looks_valid_protein(r) \
+        _seq_read_looks_valid(r,"acdefghiklmnopqrstuvwy")
 
 static inline char _seq_char_complement(char c) {
   switch(c) {
@@ -710,6 +711,18 @@ static inline size_t seq_read_truncate_name(read_t *r)
   return len;
 }
 
+static inline void seq_read_to_uppercase(read_t *r)
+{
+  char *tmp;
+  for(tmp = r->seq.b; *tmp != '\0'; tmp++) *tmp = toupper(*tmp);
+}
+
+static inline void seq_read_to_lowercase(read_t *r)
+{
+  char *tmp;
+  for(tmp = r->seq.b; *tmp != '\0'; tmp++) *tmp = tolower(*tmp);
+}
+
 #define _seq_print_wrap(fh,str,len,wrap,i,j,_putc) do { \
     for(i=0,j=0;i<len;i++,j++) { \
       if(j==wrap) { _putc((fh),'\n'); j = 0; } \
@@ -756,8 +769,6 @@ _seq_print_fasta(seq_gzprint_fasta,gzFile,gzprintf,gzputc2)
 
 _seq_print_fastq(seq_print_fastq,FILE*,fprintf,fputc2)
 _seq_print_fastq(seq_gzprint_fastq,gzFile,gzprintf,gzputc2)
-
-#define SETUP_SEQ_FILE()
 
 // New read on the stack
 // read_t* seq_read_alloc(read_t*)
