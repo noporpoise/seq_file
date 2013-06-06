@@ -570,6 +570,7 @@ static inline void seq_close(seq_file_t *sf)
   }
   if(sf->in.size != 0) { free(sf->in.b); }
   if(sf->path != NULL) { free(sf->path); }
+  free(sf);
 }
 
 // Get min and max quality values in the first `num` bases of a file.
