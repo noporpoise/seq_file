@@ -114,6 +114,10 @@ The following require a read to have been read successfully using seq_read:
 Probe a file
 ------------
 
+    seqtype_t seq_guess_filetype_from_extension(const char *path)
+
+Returns one of: {IS_SAM, IS_BAM, IS_FASTQ, IS_FASTA, IS_PLAIN, IS_UNKNOWN}
+
     int seq_guess_fastq_format(const char *path, int max_read_bases,
                                int *min_qual, int *max_qual)
 

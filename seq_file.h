@@ -325,8 +325,7 @@ static inline void seq_read_free(read_t *r)
 // Guess file type from file path or contents
 #define EXT_ARRLEN 28
 
-// Reports 
-static inline seqtype_t _guess_filetype_from_filename(const char *path)
+static inline seqtype_t seq_guess_filetype_from_extension(const char *path)
 {
   size_t plen = strlen(path);
   const char *exts[EXT_ARRLEN]
@@ -545,7 +544,7 @@ static inline seq_file_t* seq_open_fh(FILE *fh, char buffered)
 static inline seq_file_t* seq_open(const char *p)
 {
   if(strcmp(p,"-") == 0) return seq_open_fh(stdin, 0);
-  seqtype_t format = _guess_filetype_from_filename(p);
+  seqtype_t format = seq_guess_filetype_from_extension(p);
 
   if(format == IS_UNKNOWN) {
     format = _guess_filetype_from_content_using_path(p);
