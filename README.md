@@ -40,6 +40,44 @@ files.  To compile run:
 
     make HTSLIB=PATH/TO/htslib
 
+Example Code
+============
+
+Example code to read a file and print as a FASTA file using seq_file.
+
+    #include "seq_file.h"
+
+    int main(int argc, char **argv)
+    {
+      if(argc != 2) exit(EXIT_FAILURE);
+
+      seq_file_t *file = seq_open(argv[1]);
+
+      if(file == NULL)
+        exit(EXIT_FAILURE);
+
+      read_t *read = seq_read_new();
+
+      while(seq_read(file, read) > 0)
+      {
+        printf(">%s\n read->name.b);
+        printf("%s\n", read->seq.b);
+      }
+
+      seq_close(file);
+      seq_read_free(read);
+    }
+
+If the code above is pasted into a file test.c and the files `seq_file.h` and
+`buffered_input.h` are copied into the same directory, the program should compile
+with the following command:
+
+    HTSLIB=PATH/TO/HTSLIB
+    gcc -o test test.c -I$(HTSLIB)/htslib -L$(HTSLIB)/htslib -lhts -lpthread -lz
+
+You may notice we had to specify the subdirectory of htslib, since that is where
+the .h files and library (libhts.a) reside.  You'll need to compile htslib first.
+
 Functions
 =========
 
@@ -197,44 +235,6 @@ Valid sequence characters are (upper and lower case are valid):
 * DNA: ACGTN
 * RNA: ACGUN
 * protein: ACDEFGHIKLMNOPQRSTUVWY
-
-Example Code
-============
-
-Example code to read a file and print as a FASTA file using seq_file.
-
-    #include "seq_file.h"
-
-    int main(int argc, char **argv)
-    {
-      if(argc != 2) exit(EXIT_FAILURE);
-
-      seq_file_t *file = seq_open(argv[1]);
-
-      if(file == NULL)
-        exit(EXIT_FAILURE);
-
-      read_t *read = seq_read_alloc();
-
-      while(seq_read(file, read) > 0)
-      {
-        printf(">%s\n read->name.b);
-        printf("%s\n", read->seq.b);
-      }
-
-      seq_close(file);
-      seq_read_destroy(read);
-    }
-
-If the code above is pasted into a file test.c and the files `seq_file.h` and
-`buffered_input.h` are copied into the same directory, the program should compile
-with the following command:
-
-    HTSLIB=PATH/TO/HTSLIB
-    gcc -o test test.c -I$(HTSLIB)/htslib -L$(HTSLIB)/htslib -lhts -lpthread -lz
-
-You may notice we had to specify the subdirectory of htslib, since that is where
-the .h files and library (libhts.a) reside.  You'll need to compile htslib first.
 
 License
 =======
