@@ -47,6 +47,7 @@ static inline void buffer_ensure_capacity(buffer_t *buf, size_t s)
   if(buf->size < ++s) {
     buf->size = ROUNDUP2POW(s);
     buf->b = realloc(buf->b, buf->size);
+    if(buf->b == NULL) { fprintf(stderr, "Out of memory\n"); exit(EXIT_FAILURE);}
   }
 }
 
@@ -61,9 +62,8 @@ static inline void buffer_append_str(buffer_t *buf, char *str)
 static inline void buffer_append_char(buffer_t *buf, char c)
 {
   buffer_ensure_capacity(buf, buf->end+sizeof(char));
-  if(sizeof(char) > 1) memcpy(buf->b+buf->end, &c, sizeof(char));
-  else buf->b[buf->end] = c;
-  buf->b[buf->end += sizeof(char)] = '\0';
+  buf->b[buf->end++] = c;
+  buf->b[buf->end] = '\0';
 }
 
 #define buffer_terminate(buf) ((buf)->b[(buf)->end] = 0)
