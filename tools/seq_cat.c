@@ -1,3 +1,6 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <inttypes.h>
 #include <limits.h> // INT_MAX
 #include <ctype.h> // toupper tolower
 #include "seq_file.h"
@@ -78,8 +81,9 @@ static void seq_cat(const char *file, read_t *r,
     #elif defined(FASTA)
       seq_print_fasta(r, stdout, linewrap);
     #elif defined(PLAIN)
+      // sequence only, one per line, no wrap option - don't print if empty
       (void)linewrap;
-      printf("%s\n", r->seq.b); // sequence only, one per line, no wrap option
+      if(r->seq.end > 0) printf("%s\n", r->seq.b);
     #endif
   }
 

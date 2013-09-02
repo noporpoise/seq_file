@@ -23,16 +23,19 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
+  int minq = -1, maxq = -1;
+  int fmt = seq_guess_fastq_format(f, &minq, &maxq);
+
   int s = seq_read(f,&r);
 
   if(s < 0) {
-    printf("Error occurred reading file\n");
-    return -1;
+    fprintf(stderr, "Error occurred reading file\n");
+    return EXIT_FAILURE;
   }
 
   if(s == 0) {
-    printf("Cannot get any reads from file\n");
-    return -1;
+    fprintf(stderr, "Cannot get any reads from file\n");
+    return EXIT_FAILURE;
   }
 
   const char zstr[] = " (read with zlib)";
@@ -45,19 +48,26 @@ int main(int argc, char **argv)
 
   char print_qstat = (seq_is_fastq(f) || seq_is_sam(f) || seq_is_bam(f));
 
-  seq_close(f);
-  seq_read_dealloc(&r);
-
   if(print_qstat)
   {
-    int minq = -1, maxq = -1;
-    int fmt = seq_guess_fastq_format(file, 500, &minq, &maxq);
-    printf("Quality scores: %s, offset: %i, min: %i, max: %i, scores: [%i,%i]\n",
-           FASTQ_FORMATS[fmt], FASTQ_OFFSET[fmt], FASTQ_MIN[fmt], FASTQ_MAX[fmt],
-           FASTQ_MIN[fmt]-FASTQ_OFFSET[fmt], FASTQ_MAX[fmt]-FASTQ_OFFSET[fmt]);
+    if(fmt == -1) printf("Couldn't get any quality scores\n");
+    else {
+      printf("Quality scores: %s, offset: %i, min: %i, max: %i, scores: [%i,%i]\n",
+             FASTQ_FORMATS[fmt], FASTQ_OFFSET[fmt], FASTQ_MIN[fmt], FASTQ_MAX[fmt],
+             FASTQ_MIN[fmt]-FASTQ_OFFSET[fmt], FASTQ_MAX[fmt]-FASTQ_OFFSET[fmt]);
 
-    printf("Quality ASCII range in first 500bp: [%i,%i]\n", minq, maxq);
+      printf("Quality ASCII range in first 500bp: [%i,%i]\n", minq, maxq);
+    }
   }
+
+  // seq_print_fastq(&r, stdout, 0);
+  // seq_read(f,&r);
+  // seq_print_fastq(&r, stdout, 0);
+
+  printf("Done.\n");
+
+  seq_close(f);
+  seq_read_dealloc(&r);
 
   return EXIT_SUCCESS;
 }

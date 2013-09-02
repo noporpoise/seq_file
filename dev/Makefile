@@ -1,12 +1,10 @@
-ifndef CC
-	CC=gcc
+ifdef HTSLIB
+	SAMARGS=-I $(HTSLIB)/htslib/ -L $(HTSLIB)/htslib/ -D_USESAM=1
+	SAMLINK=-lhts
 endif
 
-# Use bash as shell
-SHELL := /bin/bash
-
-CFLAGS=-Wall -Wextra -I .. -I $(HTSLIB)/htslib/ -L $(HTSLIB)/htslib/
-LINKING=-lhts -lpthread -lz
+CFLAGS=-Wall -Wextra -I .. $(SAMARGS)
+LINKING=$(SAMLINK) -lpthread -lz
 
 ifdef DEBUG
 	OPT = -O0 --debug -g
@@ -16,14 +14,10 @@ endif
 
 all: seqcmdline
 
-seqcmdline: seq_cmdline.c ../seq_file.h ../stream_buffer.h | htslib
+seqcmdline: seq_cmdline.c ../seq_file.h ../stream_buffer.h
 	$(CC) $(OPT) $(CFLAGS) -o seqcmdline seq_cmdline.c $(LINKING)
-
-htslib:
-	@if [[ '$(HTSLIB)' == '' ]]; \
-	then echo "Error: Please pass HTSLIB=... with path to htslib"; exit 1; fi
 
 clean:
 	rm -rf seqcmdline *.dSYM *.greg
 
-.PHONY: all clean htslib
+.PHONY: all clean

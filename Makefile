@@ -1,7 +1,3 @@
-ifndef CC
-	CC=gcc
-endif
-
 ifdef HTSLIB
 	PARAMS := $(PARAMS) HTSLIB=$(shell readlink -f $(HTSLIB))
 endif
@@ -24,4 +20,4 @@ clean:
 	cd benchmarks; make clean
 	cd dev; make clean
 
-.PHONY: all clean htslib tools benchmarks dev
+.PHONY: all clean tools benchmarks dev

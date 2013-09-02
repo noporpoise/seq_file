@@ -4,24 +4,36 @@ seq_file
 C Library for reading multiple bioinformatics sequence file formats  
 https://github.com/noporpoise/seq_file  
 Isaac Turner <turner.isaac@gmail.com>  
-14 January 2012, license: BSD
+2 September 2013, license: BSD
 
 About
 =====
 
 The aim is to provide a C library that allows programs to transparently read
-sequence data from multiple file formats, without having to worry about the format.
+sequence data without having to worry about the file format.
 Pass a file to `seq_open(path)` and then read sequences using `seq_read(...)`.
 File format is automatically detected.
 
 Currently supports:
-* SAM & BAM
+* SAM & BAM (if compiled with htslib)
 * FASTA (& gzipped fasta)
 * FASTQ (& gzipped fastq)
 * 'plain' format (one sequence per line [.txt]) (& gzipped plain [.txt.gz])
 
 `seq_open_fh(...)` allows you to read through pipes and the command line.
 `seq_open2(...)` gives more options about how you'd like to read your input.
+
+Build
+=====
+
+seq_file requires [htslib](https://github.com/samtools/htslib) for reading SAM/BAM
+files.  To compile run with htslib:
+
+    make HTSLIB=PATH/TO/htslib
+
+or without (you won't be able to read sam/bam files)
+
+    make
 
 Tools
 =====
@@ -31,14 +43,6 @@ Also included are some tools that use seq_file:
 * `fqcat`: print file as FASTQ
 * `seqcat`: print file sequence-only one entry per line ('plain' format)
 * `seqstat`: print details about a sequence file
-
-Build
-=====
-
-seq_file requires [htslib](https://github.com/samtools/htslib) for reading SAM/BAM
-files.  To compile run:
-
-    make HTSLIB=PATH/TO/htslib
 
 Example Code
 ============
@@ -60,8 +64,10 @@ Example code to read a file and print as a FASTA file using seq_file.
 
       while(seq_read(file, read) > 0)
       {
-        printf(">%s\n read->name.b);
+        printf("@%s\n", read->name.b);
         printf("%s\n", read->seq.b);
+        printf("+\n);
+        printf("%s\n", read->qual.b);
       }
 
       seq_close(file);
@@ -69,14 +75,17 @@ Example code to read a file and print as a FASTA file using seq_file.
     }
 
 If the code above is pasted into a file test.c and the files `seq_file.h` and
-`buffered_input.h` are copied into the same directory, the program should compile
+`stream_buffer.h` are copied into the same directory, the program should compile
 with the following command:
 
-    HTSLIB=PATH/TO/HTSLIB
-    gcc -o test test.c -I$(HTSLIB)/htslib -L$(HTSLIB)/htslib -lhts -lpthread -lz
+    gcc -Wall -o test test.c -lz
 
-You may notice we had to specify the subdirectory of htslib, since that is where
-the .h files and library (libhts.a) reside.  You'll need to compile htslib first.
+Or to use htslib:
+
+    HTSLIB=PATH/TO/HTSLIB
+    gcc -Wall -o test test.c -I$(HTSLIB)/htslib -L$(HTSLIB)/htslib -lhts -lpthread -lz
+
+You'll need to compile htslib first.
 
 Functions
 =========
@@ -84,13 +93,21 @@ Functions
 Opening/closing
 ---------------
 
-    read_t* seq_read_alloc()
+    read_t* seq_read_new()
 
 Returns a pointer to a new `read_t` struct
 
-    void seq_read_destroy(read_t* r)
+    void seq_read_free(read_t* r)
 
 Free a `read_t` struct
+
+    read_t* seq_read_alloc(read_t *r)
+
+Allocate an object on the stack
+
+    void seq_read_dealloc(read_t* r)
+
+Free an object on the stack
 
     seq_file_t* seq_open(const char *path)
 
@@ -99,24 +116,18 @@ Open sequence file pointed to by path.
     seq_file_t* seq_open2(const char *path, char sam_bam, char use_gzip, size_t buffer_size)
 
 Parameters:
-* `sam_bam`: if 1 opens as sam, if 2 opens as bam
+* `sam_bam`: if 1 opens as sam, if 2 opens as bam, 0 treats as other
 * `use_zlib`: if 0 opens with FILE, otherwise uses gzFile
-* `buffer_size`: size of buffer to read into.  If `0` no buffer is used, with
-  the exception of `use_zlib=1` with newer versions of zlib where all input is
-  buffered by the zlib library
+* `buffer_size`: size of buffer to read into.
+
+If `buffer_size == 0` no buffer is used, with the exception of `use_zlib=1` with newer versions of zlib where all input is buffered by the zlib library
 
     seq_file_t* seq_open_fh(FILE *fh, char buffered)
 
 Use a file handle that has already been opened.  Pass `stdin` to read from cmdline,
 pipes etc. If buffered is passed, attempts to read with a gzip stream and a buffer.
 Note: seq_open_fh can only read sam/bam files from stdin at the moment.
-
-    seq_file_t* seq_open_fh2(FILE *fh, char sam,
-                                       char use_zlib, size_t buf_size)
-
-Returns pointer to new seq_file_t on success, `seq_close()` will close `fh` so
-you shouldn't call `fclose(fh)`.  Returns `NULL` on error, in which case `fh`
-will not have been closed.
+`seq_close()` will close `fh` so you shouldn't call `fclose(fh)`. Returns `NULL` on error, in which case `fh` will not have been closed.
 
     void seq_close(seq_file_t *sf)
 
@@ -239,7 +250,7 @@ Valid sequence characters are (upper and lower case are valid):
 License
 =======
 
-    Copyright (c) 2012, Isaac Turner  
+    Copyright (c) 2013, Isaac Turner  
     Where possible, please give attribution.
 
     Redistribution and use in source and binary forms, with or without

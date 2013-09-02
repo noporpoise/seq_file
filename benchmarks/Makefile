@@ -1,12 +1,10 @@
-ifndef CC
-	CC=gcc
+ifdef HTSLIB
+	SAMARGS=-I $(HTSLIB)/htslib/ -L $(HTSLIB)/htslib/ -D_USESAM=1
+	SAMLINK=-lhts
 endif
 
-# Use bash as shell
-SHELL := /bin/bash
-
-HTS=$(HTSLIB)/htslib/
-CFLAGS=-Wall -Wextra
+CFLAGS=-Wall -Wextra -I .. $(SAMARGS)
+LINKING=$(SAMLINK) -lpthread -lz
 
 ifdef DEBUG
 	OPT = -O0 --debug -g
@@ -16,14 +14,10 @@ endif
 
 all: seqtest ktest
 
-seqtest: seq_test.c ../seq_file.h ../stream_buffer.h | htslib
-	$(CC) $(OPT) $(CFLAGS) -I.. -I$(HTS) -L$(HTS) -o seqtest seq_test.c -lhts -lpthread -lz
-ktest: ktest.c | htslib
-	$(CC) $(OPT) $(CFLAGS) -I$(HTS) -o ktest ktest.c -lz
-
-htslib:
-	@if [[ '$(HTSLIB)' == '' ]]; \
-	then echo "Error: Please pass HTSLIB=... with path to htslib"; exit 1; fi
+seqtest: seq_test.c ../seq_file.h ../stream_buffer.h
+	$(CC) $(OPT) $(CFLAGS) -o seqtest seq_test.c $(LINKING)
+ktest: ktest.c
+	$(CC) $(OPT) -Wall -Wextra -o ktest ktest.c -lz
 
 clean:
 	rm -rf seqtest ktest *.dSYM *.greg

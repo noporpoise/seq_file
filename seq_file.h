@@ -10,8 +10,13 @@
 #include <limits.h>
 #include <zlib.h>
 
-#include "hts.h"
-#include "sam.h"
+// #define _USESAM
+
+#ifdef _USESAM
+  #include "hts.h"
+  #include "sam.h"
+#endif
+
 #include "stream_buffer.h"
 
 typedef enum
@@ -30,19 +35,26 @@ struct seq_file_t
   char *path;
   FILE *f_file;
   gzFile gz_file;
-  samFile *s_file;
-  bam_hdr_t *bam_header;
+  #ifdef _USESAM
+    samFile *s_file;
+    bam_hdr_t *bam_header;
+  #endif
   int (*read)(seq_file_t *sf, read_t *r);
   buffer_t in;
-  int nextc;
   seqtype_t format;
+  // Reads pushed onto a 'read stack' aka buffer
+  read_t *rstack, *rtail; // 'unread' reads
+  int (*origread)(seq_file_t *sf, read_t *r); // used when read = _seq_read_pop
 };
 
 struct read_t
 {
   buffer_t name, seq, qual;
-  bam1_t *bam;
+  #ifdef _USESAM
+    bam1_t *bam;
+  #endif
   char from_sam; // from sam or bam
+  read_t *next; // for use in a linked list
 };
 
 #define seq_is_bam(sf) ((sf)->format == IS_BAM)
@@ -73,16 +85,63 @@ static const int FASTQ_MIN[6]    = { 33, 33, 59, 64, 67, 33};
 static const int FASTQ_MAX[6]    = {126, 73,104,104,104, 74};
 static const int FASTQ_OFFSET[6] = { 33, 33, 64, 64, 64, 33};
 
+#define DEFAULT_BUFSIZE (1<<20)
+
 //
+// Create and destroy read structs
+//
+
+static inline void seq_read_dealloc(read_t *r)
+{
+  if(r->name.b != NULL) free(r->name.b);
+  if(r->seq.b != NULL) free(r->seq.b);
+  if(r->qual.b != NULL) free(r->qual.b);
+  #ifdef _USESAM
+    if(r->bam != NULL) free(r->bam);
+  #endif
+}
+
+static inline read_t* seq_read_alloc(read_t *r)
+{
+  if(!buffer_init(&r->name, 512) ||
+     !buffer_init(&r->seq, DEFAULT_BUFSIZE) ||
+     !buffer_init(&r->qual, DEFAULT_BUFSIZE))
+  {
+    seq_read_dealloc(r);
+    return NULL;
+  }
+  #ifdef _USESAM
+    if((r->bam = bam_init1()) == NULL) {
+      seq_read_dealloc(r);
+      return NULL;
+    }
+  #endif
+  r->from_sam = 0;
+  return r;
+}
+
+static inline read_t* seq_read_new()
+{
+  read_t *r = calloc(1, sizeof(read_t));
+  if(r == NULL) return NULL;
+  if(seq_read_alloc(r) == NULL) { free(r); return NULL; }
+  return r;
+}
+
+static inline void seq_read_free(read_t *r)
+{
+  seq_read_dealloc(r);
+  free(r);
+}
 
 // file could be sam,bam,FASTA,FASTQ,txt (+gzip)
 
-#define DEFAULT_BUFSIZE (1<<20)
-
+// Complement SAM/BAM bases
 static const int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 9, 14,
                                            1, 6, 5, 13, 3, 11, 7, 15 };
 
 
+#ifdef _USESAM
 // Read a sam/bam file
 static inline int sread_s(seq_file_t *sf, read_t *read)
 {
@@ -126,20 +185,21 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
 
   return 1;
 }
+#endif /* _USESAM */
 
 
-#define RESET_READING(sf,read) do { \
-  read->name.end = read->seq.end = read->qual.end = 0;        \
-  read->name.b[0] = read->seq.b[0] = read->qual.b[0] = '\0';  \
-  read->from_sam = 0;                                         \
-  sf->nextc = -1;                                             \
-} while(0)
+#define _reset_read(sf,read) ({                                                \
+  read->name.end = read->seq.end = read->qual.end = 0;                         \
+  read->name.b[0] = read->seq.b[0] = read->qual.b[0] = '\0';                   \
+  read->from_sam = 0;                                                          \
+})
 
-#define _func_read_fastq(_read_fastq,__getc,__readline) \
+
+#define _func_read_fastq(_read_fastq,__getc,__ungetc,__readline)               \
   static inline int _read_fastq(seq_file_t *sf, read_t *read)                  \
   {                                                                            \
-    int c = (sf->nextc != -1 ? sf->nextc : __getc(sf));                        \
-    RESET_READING(sf,read);                                                    \
+    int c = __getc(sf);                                                        \
+    _reset_read(sf,read);                                                      \
                                                                                \
     if(c == -1) return 0;                                                      \
     if(c != '@' || __readline(sf, read->name) == 0) return -1;                 \
@@ -160,15 +220,15 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
       else return 1;                                                           \
     } while(read->qual.end < read->seq.end);                                   \
     while((c = __getc(sf)) != -1 && c != '@');                                 \
-    sf->nextc = c;                                                             \
+    __ungetc(sf, c);                                                           \
     return 1;                                                                  \
   }
 
-#define _func_read_fasta(_read_fasta,__getc,__readline) \
+#define _func_read_fasta(_read_fasta,__getc,__ungetc,__readline)               \
   static inline int _read_fasta(seq_file_t *sf, read_t *read)                  \
   {                                                                            \
-    int c = (sf->nextc != -1 ? sf->nextc : __getc(sf));                        \
-    RESET_READING(sf,read);                                                    \
+    int c = __getc(sf);                                                        \
+    _reset_read(sf,read);                                                      \
                                                                                \
     if(c == -1) return 0;                                                      \
     if(c != '>' || __readline(sf, read->name) == 0) return -1;                 \
@@ -183,16 +243,17 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
         if(r <= 0) return 1;                                                   \
       }                                                                        \
     }                                                                          \
-    sf->nextc = c;                                                             \
+    __ungetc(sf, c);                                                           \
     return 1;                                                                  \
   }
+
 
 #define _func_read_plain(_read_plain,__getc,__readline,__skipline)             \
   static inline int _read_plain(seq_file_t *sf, read_t *read)                  \
   {                                                                            \
-    int c = (sf->nextc != -1 ? sf->nextc : __getc(sf));                        \
-    RESET_READING(sf,read);                                                    \
-    while(c != -1 && isspace(c) && c != '\n') { __skipline(sf); }              \
+    int c;                                                                     \
+    _reset_read(sf,read);                                                      \
+    while((c = __getc(sf)) != -1 && isspace(c)) if(c != '\n') __skipline(sf);  \
     if(c == -1) return 0;                                                      \
     buffer_append_char(&read->seq, c);                                         \
     __readline(sf, read->seq);                                                 \
@@ -200,21 +261,49 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
     return 1;                                                                  \
   }
 
-#define _func_read_unknown(_read_unknown,__getc,__skipline,_fastq,_fasta,_plain)\
+#define _func_read_unknown(_read_unknown,__getc,__ungetc,__skipline,__fastq,__fasta,__plain)\
   static inline int _read_unknown(seq_file_t *sf, read_t *read)                \
   {                                                                            \
-    RESET_READING(sf, read);                                                   \
     int c;                                                                     \
-    while((c = __getc(sf)) != -1 && isspace(c)) {                              \
-      if(c != '\n') { __skipline(sf); }                                        \
-    }                                                                          \
+    _reset_read(sf, read);                                                     \
+    while((c = __getc(sf)) != -1 && isspace(c)) if(c != '\n') __skipline(sf);  \
     if(c == -1) return 0;                                                      \
-    if(c == '@') { sf->format = IS_FASTQ; sf->read = _fastq; }                 \
-    else if(c == '>') { sf->format = IS_FASTA; sf->read = _fasta; }            \
-    else { sf->format = IS_PLAIN; sf->read = _plain; }                         \
-    sf->nextc = c;                                                             \
+    if(c == '@') { sf->format = IS_FASTQ; sf->read = __fastq; }                \
+    else if(c == '>') { sf->format = IS_FASTA; sf->read = __fasta; }           \
+    else { sf->format = IS_PLAIN; sf->read = __plain; }                        \
+    __ungetc(sf, c);                                                           \
     return sf->read(sf,read);                                                  \
   }
+
+#define _SF_SWAP(x,y,tmp) ({(tmp) = (x); (x) = (y); (y) = (tmp);})
+
+// Undefined behaviour if you have not previously called _seq_read_shift
+static inline int _seq_read_pop(seq_file_t *sf, read_t *read)
+{
+  buffer_t tmp;
+  read_t *next = sf->rstack;
+  sf->rstack = sf->rstack->next;
+  _SF_SWAP(read->name, next->name, tmp);
+  _SF_SWAP(read->seq, next->seq, tmp);
+  _SF_SWAP(read->qual, next->qual, tmp);
+  seq_read_free(next);
+  if(sf->rstack == NULL) sf->read = sf->origread;
+  return 1;
+}
+
+// Push a read onto the read stack
+static inline void _seq_read_shift(seq_file_t *sf, read_t *read)
+{
+  if(sf->rstack == NULL) {
+    sf->origread = sf->read;
+    sf->read = _seq_read_pop;
+    sf->rstack = sf->rtail = read;
+  }
+  else {
+    sf->rtail->next = read;
+    sf->rtail = read;
+  }
+}
 
 // perform reading on seq_file_t
 
@@ -224,7 +313,13 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
 #define _sf_fgetc(sf)               fgetc(sf->f_file)
 #define _sf_fgetc_buf(sf)           fgetc_buf(sf->f_file,&sf->in)
 
-// readline on seq_file_t
+// ungetc on seq_file_t
+#define _sf_gzungetc(sf,c)          gzungetc(c,sf->gz_file)
+#define _sf_gzungetc_buf(sf,c)      ungetc_buf(c,&sf->in)
+#define _sf_fungetc(sf,c)           fungetc(c,sf->f_file)
+#define _sf_fungetc_buf(sf,c)       ungetc_buf(c,&sf->in)
+
+// readline on seq_file_t using buffer into read
 #define _sf_gzreadline(sf,buf)      gzreadline(sf->gz_file,&buf.b,&buf.end,&buf.size)
 #define _sf_gzreadline_buf(sf,buf)  gzreadline_buf(sf->gz_file,&sf->in,&buf.b,&buf.end,&buf.size)
 #define _sf_freadline(sf,buf)       freadline(sf->f_file,&buf.b,&buf.end,&buf.size)
@@ -237,16 +332,16 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
 #define _sf_fskipline_buf(sf)       fskipline_buf(sf->f_file,&sf->in)
 
 // Read FASTQ
-_func_read_fastq(_seq_read_fastq_f,      _sf_fgetc,      _sf_freadline)
-_func_read_fastq(_seq_read_fastq_gz,     _sf_gzgetc,     _sf_gzreadline)
-_func_read_fastq(_seq_read_fastq_f_buf,  _sf_fgetc_buf,  _sf_freadline_buf)
-_func_read_fastq(_seq_read_fastq_gz_buf, _sf_gzgetc_buf, _sf_gzreadline_buf)
+_func_read_fastq(_seq_read_fastq_f,      _sf_fgetc,      _sf_fungetc,      _sf_freadline)
+_func_read_fastq(_seq_read_fastq_gz,     _sf_gzgetc,     _sf_gzungetc,     _sf_gzreadline)
+_func_read_fastq(_seq_read_fastq_f_buf,  _sf_fgetc_buf,  _sf_fungetc_buf,  _sf_freadline_buf)
+_func_read_fastq(_seq_read_fastq_gz_buf, _sf_gzgetc_buf, _sf_gzungetc_buf, _sf_gzreadline_buf)
 
 // Read FASTA
-_func_read_fasta(_seq_read_fasta_f,      _sf_fgetc,      _sf_freadline)
-_func_read_fasta(_seq_read_fasta_gz,     _sf_gzgetc,     _sf_gzreadline)
-_func_read_fasta(_seq_read_fasta_f_buf,  _sf_fgetc_buf,  _sf_freadline_buf)
-_func_read_fasta(_seq_read_fasta_gz_buf, _sf_gzgetc_buf, _sf_gzreadline_buf)
+_func_read_fasta(_seq_read_fasta_f,      _sf_fgetc,      _sf_fungetc,      _sf_freadline)
+_func_read_fasta(_seq_read_fasta_gz,     _sf_gzgetc,     _sf_gzungetc,     _sf_gzreadline)
+_func_read_fasta(_seq_read_fasta_f_buf,  _sf_fgetc_buf,  _sf_fungetc_buf,  _sf_freadline_buf)
+_func_read_fasta(_seq_read_fasta_gz_buf, _sf_gzgetc_buf, _sf_gzungetc_buf, _sf_gzreadline_buf)
 
 // Read plain
 _func_read_plain(_seq_read_plain_f,      _sf_fgetc,      _sf_freadline,      _sf_fskipline)
@@ -255,80 +350,42 @@ _func_read_plain(_seq_read_plain_f_buf,  _sf_fgetc_buf,  _sf_freadline_buf,  _sf
 _func_read_plain(_seq_read_plain_gz_buf, _sf_gzgetc_buf, _sf_gzreadline_buf, _sf_gzskipline_buf)
 
 // Read first entry
-_func_read_unknown(_seq_read_unknown_f,      _sf_fgetc,  _sf_fskipline,  _seq_read_fastq_f,      _seq_read_fasta_f,      _seq_read_plain_f)
-_func_read_unknown(_seq_read_unknown_gz,     _sf_gzgetc, _sf_gzskipline, _seq_read_fastq_gz,     _seq_read_fasta_gz,     _seq_read_plain_gz)
-_func_read_unknown(_seq_read_unknown_f_buf,  _sf_fgetc,  _sf_fskipline,  _seq_read_fastq_f_buf,  _seq_read_fasta_f_buf,  _seq_read_plain_f_buf)
-_func_read_unknown(_seq_read_unknown_gz_buf, _sf_gzgetc, _sf_gzskipline, _seq_read_fastq_gz_buf, _seq_read_fasta_gz_buf, _seq_read_plain_gz_buf)
+_func_read_unknown(_seq_read_unknown_f,      _sf_fgetc,      _sf_fungetc,      _sf_fskipline,  _seq_read_fastq_f,      _seq_read_fasta_f,      _seq_read_plain_f)
+_func_read_unknown(_seq_read_unknown_gz,     _sf_gzgetc,     _sf_gzungetc,     _sf_gzskipline, _seq_read_fastq_gz,     _seq_read_fasta_gz,     _seq_read_plain_gz)
+_func_read_unknown(_seq_read_unknown_f_buf,  _sf_fgetc_buf,  _sf_fungetc_buf,  _sf_fskipline,  _seq_read_fastq_f_buf,  _seq_read_fasta_f_buf,  _seq_read_plain_f_buf)
+_func_read_unknown(_seq_read_unknown_gz_buf, _sf_gzgetc_buf, _sf_gzungetc_buf, _sf_gzskipline, _seq_read_fastq_gz_buf, _seq_read_fasta_gz_buf, _seq_read_plain_gz_buf)
 
-// Create and destroy read structs
 
-static inline read_t* seq_read_alloc(read_t *r)
+static inline void _seq_file_init(seq_file_t *sf)
 {
-  buffer_init(&r->name, 512);
-  buffer_init(&r->seq, DEFAULT_BUFSIZE);
-  buffer_init(&r->qual, DEFAULT_BUFSIZE);
-  r->bam = bam_init1();
-  r->from_sam = 0;
-  return r;
+  sf->gz_file = NULL;
+  sf->f_file = NULL;
+  #ifdef _USESAM
+    sf->s_file = NULL;
+  #endif
+  sf->in.size = sf->in.begin = sf->in.end = 0;
+  sf->path = sf->in.b = NULL;
+  sf->format = IS_UNKNOWN;
+  sf->rstack = sf->rtail = NULL;
 }
 
-static inline void seq_read_dealloc(read_t *r)
+// Returns 1 on success 0 if out of memory
+static inline char _seq_setup(seq_file_t *sf, char use_zlib, size_t buf_size)
 {
-  free(r->name.b);
-  free(r->seq.b);
-  free(r->qual.b);
-  free(r->bam);
+  if(buf_size) {
+    if(!buffer_init(&sf->in, buf_size)) { free(sf); return 0; }
+    sf->read = use_zlib ? _seq_read_unknown_gz_buf : _seq_read_unknown_f_buf;
+  }
+  else sf->read = use_zlib ? _seq_read_unknown_gz : _seq_read_unknown_f;
+  return 1;
 }
-
-static inline read_t* seq_read_new()
-{
-  read_t *r = calloc(1, sizeof(read_t));
-  return seq_read_alloc(r);
-}
-
-static inline void seq_read_free(read_t *r)
-{
-  seq_read_dealloc(r);
-  free(r);
-}
-
-#define seq_file_init(sf) do { \
-    sf->gz_file = NULL;                                                        \
-    sf->f_file = NULL;                                                         \
-    sf->s_file = NULL;                                                         \
-    sf->nextc = -1;                                                            \
-    sf->in.size = sf->in.begin = sf->in.end = 0;                               \
-    sf->path = sf->in.b = NULL;                                                \
-    sf->format = IS_UNKNOWN;                                                   \
-  } while(0)
-
-// I have removed gzbuffer for now since it causes linking errors on systems
-// that are not set up properly.  Feel free to uncomment and remove empty
-// definition
-#if defined(ZLIB_VERNUM) && ZLIB_VERNUM >= 0x1240
-//#define SET_ZLIB_BUFFER(sf,s) gzbuffer((sf)->gz_file, DEFAULT_BUFSIZE)
-#define SET_ZLIB_BUFFER(sf,s)
-#else
-#define SET_ZLIB_BUFFER(sf,s)
-#endif
-
-#define seq_setup(sf,use_zlib,buf_size) do {\
-  sf->in.size = buf_size;                                                      \
-  if(sf->in.size > 0 && (sf->in.b = malloc(sf->in.size)) == NULL) {            \
-    free(sf); return NULL;                                                     \
-  }                                                                            \
-  if((sf)->in.size == 0 && use_zlib) { SET_ZLIB_BUFFER(sf,DEFAULT_BUFSIZE); }  \
-  if(use_zlib) sf->read = sf->in.size > 0 ? _seq_read_unknown_gz_buf : _seq_read_unknown_gz; \
-  else         sf->read = sf->in.size > 0 ? _seq_read_unknown_f_buf  : _seq_read_unknown_f;  \
-} while(0)
 
 // Guess file type from file path or contents
-#define EXT_ARRLEN 28
-
 static inline seqtype_t seq_guess_filetype_from_extension(const char *path)
 {
+  const int num_exts = 28;
   size_t plen = strlen(path);
-  const char *exts[EXT_ARRLEN]
+  const char *exts[num_exts]
     = {".fa", ".fasta", ".fsa", ".fsa.gz", "fsa.gzip", // FASTA
        ".faz", ".fagz", ".fa.gz", ".fa.gzip", ".fastaz", ".fasta.gzip",
        ".fq", ".fastq", ".fsq", ".fsq.gz", "fsq.gzip", // FASTQ
@@ -336,7 +393,7 @@ static inline seqtype_t seq_guess_filetype_from_extension(const char *path)
        ".txt", ".txtgz", ".txt.gz", ".txt.gzip", // Plain
        ".sam", ".bam"}; // SAM / BAM
 
-  const seqtype_t types[EXT_ARRLEN]
+  const seqtype_t types[num_exts]
     = {IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA,
        IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA,
        IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ,
@@ -344,148 +401,59 @@ static inline seqtype_t seq_guess_filetype_from_extension(const char *path)
        IS_PLAIN, IS_PLAIN, IS_PLAIN, IS_PLAIN,
        IS_SAM, IS_BAM};
 
-  size_t extlens[EXT_ARRLEN];
+  size_t extlens[num_exts];
   size_t i;
-  for(i = 0; i < EXT_ARRLEN; i++)
+  for(i = 0; i < num_exts; i++)
     extlens[i] = strlen(exts[i]);
 
-  for(i = 0; i < EXT_ARRLEN; i++)
+  for(i = 0; i < num_exts; i++)
     if(extlens[i] <= plen && strcasecmp(path+plen-extlens[i], exts[i]) == 0)
       return types[i];
 
   return IS_UNKNOWN;
 }
 
-// str should point to a tab character
-static inline char _is_num_column(char *str, char ** ptr)
-{
-  int i;
-  for(i = 1; str[i] >= '0' && str[i] <= '9'; i++);
-  *ptr = str+i;
-  return (i > 1 && str[i] == '\t');
-}
-
-// str should point to a tab character
-static inline char _is_cigar_column(char *str, char ** ptr)
-{
-  int i = 1;
-  if(str[i] == '*' && str[i+1] == '\t') {
-    *ptr = str + 2;
-    return 1;
-  }
-  while(str[i] != '\0') {
-    if(str[i] >= '0' && str[i] <= '9') i++;
-    else return 0;
-    while(str[i] >= '0' && str[i] <= '9') i++;
-    if(strchr("MIDNSHP=X", str[i])) i++;
-    else break;
-  }
-  *ptr = str+i;
-  return (i > 1 && str[i] == '\t');
-}
-
-#define ISUPPER(x) ((x) >= 'A' && (x) <= 'Z')
-
-static inline seqtype_t _guess_filetype_from_content(const char *buf, int len)
-{
-  // printf("buf: '%s'\n", buf);
-  if(len >= 4 && strncmp(buf, "@HD\t", 4) == 0) return IS_SAM;
-  if(len >= 3 && strncmp(buf, "BAM", 3) == 0) return IS_BAM;
-
-  // Test for @UU\tUU: where U is any uppercase char
-  if(buf[0] == '@' && ISUPPER(buf[1]) && ISUPPER(buf[2]) &&
-     buf[3] == '\t' && ISUPPER(buf[4]) && ISUPPER(buf[5])) return IS_SAM;
-
-  // Test for a sam entry with no headers
-  char *tmp = strchr(buf,'\t');
-  if(tmp != NULL) {
-    if(!_is_num_column(tmp, &tmp)) return IS_SEQ_UNKNOWN;
-    tmp = strchr(tmp+1, '\t');
-    if(!_is_num_column(tmp, &tmp)) return IS_SEQ_UNKNOWN;
-    if(!_is_num_column(tmp, &tmp)) return IS_SEQ_UNKNOWN;
-    if(!_is_cigar_column(tmp, &tmp)) return IS_SEQ_UNKNOWN;
-    return IS_SAM;
-  }
-  return IS_SEQ_UNKNOWN;
-}
-
-#define GUESS_BUFLEN 1000
-
-static inline seqtype_t _guess_filetype_from_content_using_path(const char *path)
-{
-  char buf[GUESS_BUFLEN];
-  gzFile gz = gzopen(path, "r");
-  if(gz == NULL) return IS_ERROR;
-  int len = gzread(gz, buf, GUESS_BUFLEN);
-  gzclose(gz);
-
-  return _guess_filetype_from_content(buf, len);
-}
-
-static inline seqtype_t _guess_filetype_from_content_using_fh(FILE *fh)
-{
-  char buf[GUESS_BUFLEN];
-  int c, i, len = 0;
-
-  // Read first line
-  while(len < GUESS_BUFLEN-1 && (c = fgetc(fh)) != -1)
-  {
-    buf[len++] = c;
-    if(c == '\n' || c == '\r') break;
-  }
-  buf[len] = '\0';
-
-  // Unget sequence
-  for(i = len-1; i >= 0 && ungetc(buf[i], fh) != EOF; i--);
-
-  // Check if we were able to restore the buffer to the FILE stream
-  if(i >= 0)
-  {
-    fprintf(stderr, "%s:%c:Error: Cannot push back onto FILE stream\n",
-            __FILE__, __LINE__);
-    exit(EXIT_FAILURE);
-  }
-
-  return _guess_filetype_from_content(buf, len);
-}
-
-// format can be: IS_SAM, IS_BAM, IS_SEQ_UNKNOWN, IS_FASTA, IS_FASTQ, IS_PLAIN
-// format cannot be IS_ERROR, IS_UNKNOWN
-static inline seq_file_t* seq_open2(const char *p, seqtype_t format,
+// sam_bam is 0 for not SAM/BAM, 1 for SAM, 2 for BAM
+static inline seq_file_t* seq_open2(const char *p, char sam_bam,
                                     char use_zlib, size_t buf_size)
 {
   seq_file_t *sf = calloc(1, sizeof(seq_file_t));
-  seq_file_init(sf);
-  sf->path = strdup(p);
-  sf->format = format;
+  _seq_file_init(sf);
 
-  if(format == IS_ERROR || format == IS_UNKNOWN) {
-    fprintf(stderr, "[%s:%i] Error: format invalid\n", __FILE__, __LINE__);
-    exit(EXIT_FAILURE);
-  }
-
-  if(format == IS_SAM || format == IS_BAM)
+  if(sam_bam)
   {
-    if((sf->s_file = sam_open(p, format == IS_SAM ? "rs" : "rb", 0)) == NULL) {
-      free(sf->path);
+    if(sam_bam != 1 && sam_bam != 2) {
+      fprintf(stderr, "[%s:%i] Error: sum_bam param must be 0, 1 (sam) or 2 (bam)\n",
+              __FILE__, __LINE__);
+      exit(EXIT_FAILURE);
+    }
+    #ifdef _USESAM
+      if((sf->s_file = sam_open(p, sam_bam == 1 ? "rs" : "rb", 0)) == NULL) {
+        free(sf->path);
+        free(sf);
+        return NULL;
+      }
+      sf->bam_header = sam_hdr_read(sf->s_file);
+      sf->read = sread_s;
+      sf->format = sam_bam == 1 ? IS_SAM : IS_BAM;
+    #else
+      fprintf(stderr, "[%s:%i] Error: not compiled with sam/bam support\n",
+              __FILE__, __LINE__);
+      exit(EXIT_FAILURE);
+    #endif
+  }
+  else
+  {
+    if(( use_zlib && ((sf->gz_file = gzopen(p, "r")) == NULL)) ||
+       (!use_zlib && ((sf->f_file  =  fopen(p, "r")) == NULL))) {
       free(sf);
       return NULL;
     }
-    sf->bam_header = sam_hdr_read(sf->s_file);
-    sf->read = sread_s;
-    return sf;
+
+    if(!_seq_setup(sf, use_zlib, buf_size)) return NULL;
   }
 
-  if(( use_zlib && ((sf->gz_file = gzopen(p, "r")) == NULL)) ||
-     (!use_zlib && ((sf->f_file  =  fopen(p, "r")) == NULL)))
-  {
-    free(sf->path);
-    free(sf);
-    return NULL;
-  }
-
-  seq_setup(sf, use_zlib, buf_size);
-
+  sf->path = strdup(p);
   return sf;
 }
 
@@ -493,27 +461,31 @@ static inline seq_file_t* seq_open2(const char *p, seqtype_t format,
 // so you shouldn't call fclose(fh)
 // Returns NULL on error, in which case FILE will not have been closed (caller
 // should then call fclose(fh))
-static inline seq_file_t* seq_open_fh2(FILE *fh, char sam_bam,
-                                       char use_zlib, size_t buf_size)
+static inline seq_file_t* seq_open_fh(FILE *fh, char sam_bam,
+                                      char use_zlib, size_t buf_size)
 {
   seq_file_t *sf = calloc(1, sizeof(seq_file_t));
-  seq_file_init(sf);
+  _seq_file_init(sf);
 
-  if(sam_bam == 1 || sam_bam == 2)
+  if(sam_bam)
   {
-    fprintf(stderr, "%s:%i:Error: opening SAM/BAM from a FILE stream not "
-                    "implemented yet, sorry\n", __FILE__, __LINE__);
-    free(sf);
-    return NULL;
-
-    /*
-    if((sf->s_file = sam_open("-", sam_bam == 1 ? "rs" : "rb", 0)) == NULL) {
-      free(sf);
-      return NULL;
+    if(sam_bam != 1 && sam_bam != 2) {
+      fprintf(stderr, "[%s:%i] Error: sum_bam param must be 0, 1 (sam) or 2 (bam)\n",
+              __FILE__, __LINE__);
+      exit(EXIT_FAILURE);
     }
-    sf->bam_header = sam_hdr_read(sf->s_file);
-    sf->read = sread_s;
-    */
+    #ifdef _USESAM
+      if((sf->s_file = sam_open("-", sam_bam == 1 ? "rs" : "rb", 0)) == NULL) {
+        free(sf);
+        return NULL;
+      }
+      sf->bam_header = sam_hdr_read(sf->s_file);
+      sf->read = sread_s;
+    #else
+      fprintf(stderr, "[%s:%i] Error: not compiled with sam/bam support\n",
+              __FILE__, __LINE__);
+      exit(EXIT_FAILURE);
+    #endif
   }
   else
   {
@@ -522,111 +494,86 @@ static inline seq_file_t* seq_open_fh2(FILE *fh, char sam_bam,
       free(sf);
       return NULL;
     }
-    seq_setup(sf, use_zlib, buf_size);
+
+    if(!_seq_setup(sf, use_zlib, buf_size)) return NULL;
   }
 
   sf->path = strdup("-");
   return sf;
 }
 
-static inline seq_file_t* seq_open_fh(FILE *fh, char buffered)
-{
-  seqtype_t type = _guess_filetype_from_content_using_fh(fh);
-
-  // sam -> 1, bam -> 2, other -> 0
-  char sam_bam = (type == IS_SAM ? 1 : (type == IS_BAM ? 2 : 0));
-
-  char gzip = buffered ? 1 : 0;
-  size_t bufsize = buffered ? DEFAULT_BUFSIZE : 0;
-  return seq_open_fh2(fh, sam_bam, gzip, bufsize);
-}
-
 static inline seq_file_t* seq_open(const char *p)
 {
-  if(strcmp(p,"-") == 0) return seq_open_fh(stdin, 0);
+  if(strcmp(p,"-") == 0) return seq_open_fh(stdin, 0, 1, DEFAULT_BUFSIZE);
+
   seqtype_t format = seq_guess_filetype_from_extension(p);
-
-  if(format == IS_UNKNOWN) {
-    format = _guess_filetype_from_content_using_path(p);
-    if(format == IS_ERROR) return NULL;
-  }
-
-  // If not sam or bam, don't assume FASTA/FASTQ until we've seen the contents
-  if(format != IS_SAM && format != IS_BAM) format = IS_SEQ_UNKNOWN;
-
-  // Read as gzip file with default buffer size
-  return seq_open2(p, format, 1, DEFAULT_BUFSIZE);
+  char sam_bam = 0;
+  if(format == IS_SAM) sam_bam = 1;
+  if(format == IS_BAM) sam_bam = 2;
+  return seq_open2(p, sam_bam, 1, DEFAULT_BUFSIZE);
 }
 
 static inline void seq_close(seq_file_t *sf)
 {
   if(sf->f_file != NULL) { fclose(sf->f_file); }
-  else if(sf->gz_file != NULL) { gzclose(sf->gz_file); }
-  else if(sf->s_file != NULL)
-  {
-    sam_close(sf->s_file);
-    free(sf->bam_header);
-  }
-  if(sf->in.size != 0) { free(sf->in.b); }
+  if(sf->gz_file != NULL) { gzclose(sf->gz_file); }
+  #ifdef _USESAM
+  if(sf->s_file != NULL) { sam_close(sf->s_file); free(sf->bam_header); }
+  #endif
+  if(sf->in.b != NULL) { free(sf->in.b); }
   if(sf->path != NULL) { free(sf->path); }
+  read_t *r = sf->rstack, *tmpr;
+  while(r != NULL) { tmpr = r->next; seq_read_free(r); r = tmpr; }
   free(sf);
 }
 
-// Get min and max quality values in the first `num` bases of a file.
+// Get min and max quality values by examining the first 
 // Returns 0 if no qual scores, 1 on success, -1 if read error
-static inline int seq_get_qual_limits(const char *path, size_t num,
-                                      int *minptr, int *maxptr)
+static inline int seq_get_qual_limits(seq_file_t *sf, int *minq, int *maxq)
 {
-  seq_file_t *sf = seq_open(path);
-  if(sf == NULL) return -1;
-  read_t r;
-  seq_read_alloc(&r);
-  int i, limit, min = INT_MAX, max = 0;
-  size_t count = 0;
+  read_t *r;
+  int min = INT_MAX, max = 0;
+  size_t i, count = 0, qcount = 0, limit = 1000, curr;
+  char q;
 
-  while(count < num && seq_read(sf,&r))
+  int (*read)(seq_file_t *sf, read_t *r) = sf->read;
+
+  while(count < limit && (r = seq_read_new()) != NULL && read(sf,r) > 0)
   {
-    limit = (r.qual.end < num-count ? r.qual.end : num-count);
-    for(i = 0; i < limit; i++)
-    {
-      char q = r.qual.b[i];
+    curr = (r->qual.end < limit - qcount ? r->qual.end : limit - qcount);
+    for(i = 0; i < curr; i++) {
+      q = r->qual.b[i];
       if(q > max) max = q;
       if(q < min) min = q;
     }
-    count += limit;
+    count += r->seq.end;
+    qcount += r->qual.end;
+    _seq_read_shift(sf, r);
   }
 
-  seq_read_dealloc(&r);
-  seq_close(sf);
+  if(qcount > 0) { *minq = min; *maxq = max; }
 
-  if(count > 0) {
-    *minptr = min;
-    *maxptr = max;
-  }
-  return (count > 0);
+  return (qcount > 0);
 }
 
 // Returns -1 on error
 // Returns 0 if not in FASTQ format/ not recognisable (offset:33, min:33, max:104)
 // max_read_bases is the number of quality scores to read
-static inline int seq_guess_fastq_format(const char *path, int max_read_bases,
-                                         int *min_qual, int *max_qual)
+static inline int seq_guess_fastq_format(seq_file_t *sf, int *minq, int *maxq)
 {
   // Detect fastq offset
-  *min_qual = INT_MAX;
-  *max_qual = 0;
+  *minq = INT_MAX;
+  *maxq = 0;
 
-  if(seq_get_qual_limits(path, max_read_bases, min_qual, max_qual) <= 0) {
-    return -1;
-  }
+  if(seq_get_qual_limits(sf, minq, maxq) <= 0) return -1;
 
   // See: http://en.wikipedia.org/wiki/FASTQ_format
   // Usually expect 0,40, but new software can report 41, so using <= MAX+1
-  if(*min_qual >= 33 && *max_qual <= 73) return 1; // sanger
-  else if(*min_qual >= 33 && *max_qual <= 75) return 5; // Illumina 1.8+
-  else if(*min_qual >= 67 && *max_qual <= 105) return 4; // Illumina 1.5+
-  else if(*min_qual >= 64 && *max_qual <= 105) return 3; // Illumina 1.3+
-  else if(*min_qual >= 59 && *max_qual <= 105) return 2; // Solexa
+  if(*minq >= 33 && *maxq <= 73) return 1; // sanger
+  else if(*minq >= 33 && *maxq <= 75) return 5; // Illumina 1.8+
+  else if(*minq >= 67 && *maxq <= 105) return 4; // Illumina 1.5+
+  else if(*minq >= 64 && *maxq <= 105) return 3; // Illumina 1.3+
+  else if(*minq >= 59 && *maxq <= 105) return 2; // Solexa
   else return 0; // Unknown, assume 33 offset max value 104
 }
 
