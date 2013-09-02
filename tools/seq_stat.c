@@ -23,10 +23,10 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  int minq = -1, maxq = -1;
-  int fmt = seq_guess_fastq_format(f, &minq, &maxq);
+  int minq = -1, maxq = -1, s, fmt;
 
-  int s = seq_read(f,&r);
+  fmt = seq_guess_fastq_format(f, &minq, &maxq);
+  s = seq_read(f,&r);
 
   if(s < 0) {
     fprintf(stderr, "Error occurred reading file\n");
@@ -60,9 +60,8 @@ int main(int argc, char **argv)
     }
   }
 
-  // seq_print_fastq(&r, stdout, 0);
-  // seq_read(f,&r);
-  // seq_print_fastq(&r, stdout, 0);
+  // while(seq_read(f,&r) > 0)
+  //   seq_print_fastq(&r, stdout, 0);
 
   printf("Done.\n");
 

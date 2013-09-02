@@ -43,7 +43,7 @@ struct seq_file_t
   buffer_t in;
   seqtype_t format;
   // Reads pushed onto a 'read stack' aka buffer
-  read_t *rstack, *rtail; // 'unread' reads
+  read_t *rhead, *rtail; // 'unread' reads, add to tail, return from head
   int (*origread)(seq_file_t *sf, read_t *r); // used when read = _seq_read_pop
 };
 
@@ -70,7 +70,7 @@ struct read_t
 #define seq_get_path(sf) ((sf)->path)
 
 // return 1 on success, 0 on eof, -1 if partially read / syntax error
-#define seq_read(sf,r) (sf)->read(sf,r)
+#define seq_read(sf,r) ((sf)->read(sf,r))
 
 // File format information (http://en.wikipedia.org/wiki/FASTQ_format)
 static const char * const FASTQ_FORMATS[]
@@ -117,6 +117,7 @@ static inline read_t* seq_read_alloc(read_t *r)
     }
   #endif
   r->from_sam = 0;
+  r->next = NULL;
   return r;
 }
 
@@ -143,7 +144,7 @@ static const int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 9, 14,
 
 #ifdef _USESAM
 // Read a sam/bam file
-static inline int sread_s(seq_file_t *sf, read_t *read)
+static inline int _seq_read_sam(seq_file_t *sf, read_t *read)
 {
   read->name.end = read->seq.end = read->qual.end = 0;
   read->name.b[0] = read->seq.b[0] = read->qual.b[0] = '\0';
@@ -268,11 +269,11 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
     _reset_read(sf, read);                                                     \
     while((c = __getc(sf)) != -1 && isspace(c)) if(c != '\n') __skipline(sf);  \
     if(c == -1) return 0;                                                      \
-    if(c == '@') { sf->format = IS_FASTQ; sf->read = __fastq; }                \
-    else if(c == '>') { sf->format = IS_FASTA; sf->read = __fasta; }           \
-    else { sf->format = IS_PLAIN; sf->read = __plain; }                        \
+    if(c == '@') { sf->format = IS_FASTQ; sf->origread = __fastq; }            \
+    else if(c == '>') { sf->format = IS_FASTA; sf->origread = __fasta; }       \
+    else { sf->format = IS_PLAIN; sf->origread = __plain; }                    \
     __ungetc(sf, c);                                                           \
-    return sf->read(sf,read);                                                  \
+    return sf->origread(sf,read);                                              \
   }
 
 #define _SF_SWAP(x,y,tmp) ({(tmp) = (x); (x) = (y); (y) = (tmp);})
@@ -281,27 +282,51 @@ static inline int sread_s(seq_file_t *sf, read_t *read)
 static inline int _seq_read_pop(seq_file_t *sf, read_t *read)
 {
   buffer_t tmp;
-  read_t *next = sf->rstack;
-  sf->rstack = sf->rstack->next;
+  read_t *next = sf->rhead;
+  sf->rhead = sf->rhead->next;
   _SF_SWAP(read->name, next->name, tmp);
   _SF_SWAP(read->seq, next->seq, tmp);
   _SF_SWAP(read->qual, next->qual, tmp);
   seq_read_free(next);
-  if(sf->rstack == NULL) sf->read = sf->origread;
+  if(sf->rhead == NULL) {
+    sf->read = sf->origread;
+    sf->rtail = NULL;
+  }
   return 1;
 }
 
-// Push a read onto the read stack
+// Add a read onto the read buffer (linked list FIFO)
 static inline void _seq_read_shift(seq_file_t *sf, read_t *read)
 {
-  if(sf->rstack == NULL) {
-    sf->origread = sf->read;
+  if(sf->rhead == NULL) {
     sf->read = _seq_read_pop;
-    sf->rstack = sf->rtail = read;
+    sf->rhead = sf->rtail = read;
   }
   else {
     sf->rtail->next = read;
     sf->rtail = read;
+  }
+  read->next = NULL;
+}
+
+// Load reads until we have at least nbases loaded or we hit EOF
+static inline void _seq_buffer_reads(seq_file_t *sf, size_t nbases)
+{
+  int (*read)(seq_file_t *sf, read_t *r) = sf->origread;
+
+  // Sum bases already in buffer
+  read_t *r = sf->rhead;
+  size_t currbases = 0;
+  while(r != NULL) { currbases += r->seq.end; r = r->next; }
+
+  while(currbases < nbases) {
+    if((r = seq_read_new()) == NULL) {
+      fprintf(stderr, "[%s:%i] Error out of memory\n", __FILE__, __LINE__);
+      break;
+    }
+    if(read(sf,r) <= 0) { seq_read_free(r); break; }
+    currbases += r->seq.end;
+    _seq_read_shift(sf, r);
   }
 }
 
@@ -366,7 +391,7 @@ static inline void _seq_file_init(seq_file_t *sf)
   sf->in.size = sf->in.begin = sf->in.end = 0;
   sf->path = sf->in.b = NULL;
   sf->format = IS_UNKNOWN;
-  sf->rstack = sf->rtail = NULL;
+  sf->rhead = sf->rtail = NULL;
 }
 
 // Returns 1 on success 0 if out of memory
@@ -374,9 +399,10 @@ static inline char _seq_setup(seq_file_t *sf, char use_zlib, size_t buf_size)
 {
   if(buf_size) {
     if(!buffer_init(&sf->in, buf_size)) { free(sf); return 0; }
-    sf->read = use_zlib ? _seq_read_unknown_gz_buf : _seq_read_unknown_f_buf;
+    sf->origread = use_zlib ? _seq_read_unknown_gz_buf : _seq_read_unknown_f_buf;
   }
-  else sf->read = use_zlib ? _seq_read_unknown_gz : _seq_read_unknown_f;
+  else sf->origread = use_zlib ? _seq_read_unknown_gz : _seq_read_unknown_f;
+  sf->read = sf->origread;
   return 1;
 }
 
@@ -434,7 +460,7 @@ static inline seq_file_t* seq_open2(const char *p, char sam_bam,
         return NULL;
       }
       sf->bam_header = sam_hdr_read(sf->s_file);
-      sf->read = sread_s;
+      sf->read = sf->origread = _seq_read_sam;
       sf->format = sam_bam == 1 ? IS_SAM : IS_BAM;
     #else
       fprintf(stderr, "[%s:%i] Error: not compiled with sam/bam support\n",
@@ -480,7 +506,7 @@ static inline seq_file_t* seq_open_fh(FILE *fh, char sam_bam,
         return NULL;
       }
       sf->bam_header = sam_hdr_read(sf->s_file);
-      sf->read = sread_s;
+      sf->read = sf->origread = _seq_read_sam;
     #else
       fprintf(stderr, "[%s:%i] Error: not compiled with sam/bam support\n",
               __FILE__, __LINE__);
@@ -522,7 +548,7 @@ static inline void seq_close(seq_file_t *sf)
   #endif
   if(sf->in.b != NULL) { free(sf->in.b); }
   if(sf->path != NULL) { free(sf->path); }
-  read_t *r = sf->rstack, *tmpr;
+  read_t *r = sf->rhead, *tmpr;
   while(r != NULL) { tmpr = r->next; seq_read_free(r); r = tmpr; }
   free(sf);
 }
@@ -533,22 +559,23 @@ static inline int seq_get_qual_limits(seq_file_t *sf, int *minq, int *maxq)
 {
   read_t *r;
   int min = INT_MAX, max = 0;
-  size_t i, count = 0, qcount = 0, limit = 1000, curr;
+  size_t i, count = 0, qcount = 0, limit = 1000, len;
   char q;
 
-  int (*read)(seq_file_t *sf, read_t *r) = sf->read;
+  _seq_buffer_reads(sf, limit);
+  r = sf->rhead;
 
-  while(count < limit && (r = seq_read_new()) != NULL && read(sf,r) > 0)
+  while(count < limit && r != NULL)
   {
-    curr = (r->qual.end < limit - qcount ? r->qual.end : limit - qcount);
-    for(i = 0; i < curr; i++) {
+    len = (r->qual.end < limit - qcount ? r->qual.end : limit - qcount);
+    for(i = 0; i < len; i++) {
       q = r->qual.b[i];
       if(q > max) max = q;
       if(q < min) min = q;
     }
     count += r->seq.end;
     qcount += r->qual.end;
-    _seq_read_shift(sf, r);
+    r = r->next;
   }
 
   if(qcount > 0) { *minq = min; *maxq = max; }
