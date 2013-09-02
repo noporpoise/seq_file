@@ -383,9 +383,9 @@ static inline char _seq_setup(seq_file_t *sf, char use_zlib, size_t buf_size)
 // Guess file type from file path or contents
 static inline seqtype_t seq_guess_filetype_from_extension(const char *path)
 {
-  const int num_exts = 28;
+  #define _NUM_SEQ_EXT 28
   size_t plen = strlen(path);
-  const char *exts[num_exts]
+  const char *exts[_NUM_SEQ_EXT]
     = {".fa", ".fasta", ".fsa", ".fsa.gz", "fsa.gzip", // FASTA
        ".faz", ".fagz", ".fa.gz", ".fa.gzip", ".fastaz", ".fasta.gzip",
        ".fq", ".fastq", ".fsq", ".fsq.gz", "fsq.gzip", // FASTQ
@@ -393,7 +393,7 @@ static inline seqtype_t seq_guess_filetype_from_extension(const char *path)
        ".txt", ".txtgz", ".txt.gz", ".txt.gzip", // Plain
        ".sam", ".bam"}; // SAM / BAM
 
-  const seqtype_t types[num_exts]
+  const seqtype_t types[_NUM_SEQ_EXT]
     = {IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA,
        IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA,
        IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ,
@@ -401,12 +401,12 @@ static inline seqtype_t seq_guess_filetype_from_extension(const char *path)
        IS_PLAIN, IS_PLAIN, IS_PLAIN, IS_PLAIN,
        IS_SAM, IS_BAM};
 
-  size_t extlens[num_exts];
+  size_t extlens[_NUM_SEQ_EXT];
   size_t i;
-  for(i = 0; i < num_exts; i++)
+  for(i = 0; i < _NUM_SEQ_EXT; i++)
     extlens[i] = strlen(exts[i]);
 
-  for(i = 0; i < num_exts; i++)
+  for(i = 0; i < _NUM_SEQ_EXT; i++)
     if(extlens[i] <= plen && strcasecmp(path+plen-extlens[i], exts[i]) == 0)
       return types[i];
 

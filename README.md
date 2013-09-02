@@ -83,7 +83,7 @@ with the following command:
 Or to use htslib:
 
     HTSLIB=PATH/TO/HTSLIB
-    gcc -Wall -o test test.c -I$(HTSLIB)/htslib -L$(HTSLIB)/htslib -lhts -lpthread -lz
+    gcc -Wall -o test test.c -D_USESAM=1 -I$(HTSLIB)/htslib -L$(HTSLIB)/htslib -lhts -lpthread -lz
 
 You'll need to compile htslib first.
 
