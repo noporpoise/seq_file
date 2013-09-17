@@ -103,9 +103,9 @@ static inline void seq_read_dealloc(read_t *r)
 
 static inline read_t* seq_read_alloc(read_t *r)
 {
-  if(!buffer_init(&r->name, 512) ||
-     !buffer_init(&r->seq, DEFAULT_BUFSIZE) ||
-     !buffer_init(&r->qual, DEFAULT_BUFSIZE))
+  if(!buffer_init(&r->name, 256) ||
+     !buffer_init(&r->seq, 256) ||
+     !buffer_init(&r->qual, 256))
   {
     seq_read_dealloc(r);
     return NULL;
