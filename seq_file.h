@@ -10,7 +10,11 @@
 #include <limits.h>
 #include <zlib.h>
 
-// #define _USESAM
+// #define _USESAM 1
+
+#if defined(_USESAM) && _USESAM == 0
+#undef _USESAM
+#endif
 
 #ifdef _USESAM
   #include "hts.h"
