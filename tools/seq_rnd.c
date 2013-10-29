@@ -36,7 +36,8 @@ int main(int argc, char **argv)
   // Seed random
   struct timeval time;
   gettimeofday(&time, NULL);
-  srand((time.tv_sec * 1000) + (time.tv_usec / 1000) ^ getpid());
+  srand((((time.tv_sec ^ getpid()) * 1000000) + time.tv_usec));
+  // printf("%zu %d\n", time.tv_sec, time.tv_usec);
 
   uint32_t len = 0, i;
   if(argc > 1 && !parse_entire_uint(argv[1], &len)) print_usage();
