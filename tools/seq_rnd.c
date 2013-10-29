@@ -3,7 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <limits.h>
-#include <time.h>
+#include <sys/time.h>
+#include <unistd.h>
 #include <stdint.h>
 
 char *cmdstr;
@@ -32,7 +33,11 @@ int main(int argc, char **argv)
 
   if(argc > 2) print_usage();
 
-  srand(time(NULL));
+  // Seed random
+  struct timeval time;
+  gettimeofday(&time, NULL);
+  srand((time.tv_sec * 1000) + (time.tv_usec / 1000) ^ getpid());
+
   uint32_t len = 0, i;
   if(argc > 1 && !parse_entire_uint(argv[1], &len)) print_usage();
 
