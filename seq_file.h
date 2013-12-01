@@ -107,6 +107,13 @@ static inline void seq_read_dealloc(read_t *r)
 
 static inline read_t* seq_read_alloc(read_t *r)
 {
+  r->name.b = r->seq.b = r->qual.b = NULL;
+  r->from_sam = 0;
+  r->next = NULL;
+  #ifdef _USESAM
+  r->bam = NULL;
+  #endif
+
   if(!buffer_init(&r->name, 256) ||
      !buffer_init(&r->seq, 256) ||
      !buffer_init(&r->qual, 256))
@@ -120,8 +127,6 @@ static inline read_t* seq_read_alloc(read_t *r)
       return NULL;
     }
   #endif
-  r->from_sam = 0;
-  r->next = NULL;
   return r;
 }
 
