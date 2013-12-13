@@ -1,5 +1,5 @@
 ifdef HTSLIB
-	SAMARGS=-I $(HTSLIB)/htslib/ -L $(HTSLIB)/htslib/ -D_USESAM=1
+	SAMARGS=-I $(HTSLIB)/htslib -L $(HTSLIB) -D_USESAM=1
 	SAMLINK=-lhts
 endif
 
