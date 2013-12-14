@@ -1,6 +1,6 @@
 ifdef HTSLIB
-	SAMARGS=-I $(HTSLIB)/htslib -L $(HTSLIB) -D_USESAM=1
-	SAMLINK=-lhts -lm
+	SAMARGS=-I $(HTSLIB)/htslib -D_USESAM=1 $(HTSLIB)/libhts.a
+	SAMLINK=-lm
 endif
 
 CFLAGS=-Wall -Wextra -I .. $(SAMARGS)
