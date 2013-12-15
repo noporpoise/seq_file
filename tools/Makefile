@@ -1,10 +1,9 @@
 ifdef HTSLIB
-	SAMARGS=-I $(HTSLIB)/htslib -D_USESAM=1 $(HTSLIB)/libhts.a
-	SAMLINK=-lm
+	HTSARGS=-I $(HTSLIB)/htslib -D_USESAM=1 $(HTSLIB)/libhts.a -lm
 endif
 
-CFLAGS=-Wall -Wextra -I .. $(SAMARGS)
-LINKING=$(SAMLINK) -lpthread -lz
+CFLAGS=-Wall -Wextra -I ..
+LINKING=$(HTSARGS) $(SAMLINK) -lpthread -lz
 
 ifdef DEBUG
 	OPT = -O0 --debug -g
