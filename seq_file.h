@@ -163,7 +163,7 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *read)
   char *str = bam_get_qname(read->bam);
   buffer_append_str(&read->name, str);
 
-  size_t qlen = read->bam->core.l_qseq;
+  size_t qlen = (size_t)read->bam->core.l_qseq;
   buffer_ensure_capacity(&read->seq, qlen);
   buffer_ensure_capacity(&read->qual, qlen);
   uint8_t *bamseq = bam_get_seq(read->bam);
@@ -728,7 +728,7 @@ _seq_print_fasta(seq_print_fasta,FILE*,fprintf,fputc2)
 _seq_print_fasta(seq_gzprint_fasta,gzFile,gzprintf,gzputc2)
 
 #define _seq_print_fastq(fname,ftype,_printf,_putc)                            \
-    static inline void fname(const read_t *r, ftype fh, size_t linewrap) {     \
+  static inline void fname(const read_t *r, ftype fh, size_t linewrap) {       \
     size_t i, j, qlimit = (r->qual.end < r->seq.end ? r->qual.end : r->seq.end);\
     if(linewrap == 0) {                                                        \
       _printf(fh, "@%s\n%s\n+\n%.*s",r->name.b,r->seq.b,(int)qlimit,r->qual.b);\
