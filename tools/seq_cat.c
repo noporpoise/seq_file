@@ -25,6 +25,8 @@ char parse_entire_uint(char *str, uint32_t *result)
   return 1;
 }
 
+void print_usage(const char *err) __attribute__((noreturn));
+
 void print_usage(const char *err)
 {
   if(err != NULL) fprintf(stderr, "%s: %s\n", cmdstr, err);

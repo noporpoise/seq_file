@@ -218,7 +218,7 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *read)
     while((c = __getc(sf)) != '+') {                                           \
       if(c == -1) return -1;                                                   \
       if(c != '\r' && c != '\n') {                                             \
-        buffer_append_char(&read->seq,c);                                      \
+        buffer_append_char(&read->seq,(char)c);                                \
         if(__readline(sf, read->seq) == 0) return -1;                          \
         buffer_chomp(&(read->seq));                                            \
       }                                                                        \
@@ -247,8 +247,8 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *read)
     while((c = __getc(sf)) != '>') {                                           \
       if(c == -1) return 1;                                                    \
       if(c != '\r' && c != '\n') {                                             \
-        buffer_append_char(&read->seq,c);                                      \
-        int r = __readline(sf, read->seq);                                     \
+        buffer_append_char(&read->seq,(char)c);                                \
+        long r = (long)__readline(sf, read->seq);                              \
         buffer_chomp(&(read->seq));                                            \
         if(r <= 0) return 1;                                                   \
       }                                                                        \
@@ -265,7 +265,7 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *read)
     _reset_read(sf,read);                                                      \
     while((c = __getc(sf)) != -1 && isspace(c)) if(c != '\n') __skipline(sf);  \
     if(c == -1) return 0;                                                      \
-    buffer_append_char(&read->seq, c);                                         \
+    buffer_append_char(&read->seq, (char)c);                                   \
     __readline(sf, read->seq);                                                 \
     buffer_chomp(&(read->seq));                                                \
     return 1;                                                                  \
@@ -562,7 +562,7 @@ static inline void seq_close(seq_file_t *sf)
   free(sf);
 }
 
-// Get min and max quality values by examining the first 
+// Get min/max qual scores by reading sequences into buffer and reporting min/max
 // Returns 0 if no qual scores, 1 on success, -1 if read error
 static inline int seq_get_qual_limits(seq_file_t *sf, int *minq, int *maxq)
 {
@@ -619,7 +619,7 @@ static inline char _seq_read_looks_valid(read_t *r, const char *alphabet)
   if(r->qual.end != 0) {
     if(r->qual.end != r->seq.end) return 0;
     for(i = 0; i < r->seq.end; i++) {
-      char b = tolower(r->seq.b[i]);
+      char b = (char)tolower(r->seq.b[i]);
       char q = r->qual.b[i];
       if(strchr(alphabet, b) == NULL) return 0;
       if(q < 33 || q > 105) return 0;
@@ -627,7 +627,7 @@ static inline char _seq_read_looks_valid(read_t *r, const char *alphabet)
   }
   else {
     for(i = 0; i < r->seq.end; i++) {
-      char b = tolower(r->seq.b[i]);
+      char b = (char)tolower(r->seq.b[i]);
       if(strchr(alphabet, b) == NULL) return 0;
     }
   }
@@ -697,13 +697,13 @@ static inline size_t seq_read_truncate_name(read_t *r)
 static inline void seq_read_to_uppercase(read_t *r)
 {
   char *tmp;
-  for(tmp = r->seq.b; *tmp != '\0'; tmp++) *tmp = toupper(*tmp);
+  for(tmp = r->seq.b; *tmp != '\0'; tmp++) *tmp = (char)toupper(*tmp);
 }
 
 static inline void seq_read_to_lowercase(read_t *r)
 {
   char *tmp;
-  for(tmp = r->seq.b; *tmp != '\0'; tmp++) *tmp = tolower(*tmp);
+  for(tmp = r->seq.b; *tmp != '\0'; tmp++) *tmp = (char)tolower(*tmp);
 }
 
 #define _seq_print_wrap(fh,str,len,wrap,i,j,_putc) do { \
@@ -714,10 +714,10 @@ static inline void seq_read_to_lowercase(read_t *r)
   } while(0)
 
 #define _seq_print_fasta(fname,ftype,_printf,_putc)                            \
-  static inline void fname(const read_t *r, ftype fh, int linewrap) {          \
+  static inline void fname(const read_t *r, ftype fh, size_t linewrap) {       \
     if(linewrap == 0)  _printf(fh, ">%s\n%s\n", r->name.b, r->seq.b);          \
     else {                                                                     \
-      size_t i; int j;                                                         \
+      size_t i, j;                                                             \
       _printf(fh, ">%s\n", r->name.b);                                         \
       _seq_print_wrap(fh, r->seq.b, r->seq.end, linewrap, i, j, _putc);        \
       _putc(fh, '\n');                                                         \
@@ -728,10 +728,9 @@ _seq_print_fasta(seq_print_fasta,FILE*,fprintf,fputc2)
 _seq_print_fasta(seq_gzprint_fasta,gzFile,gzprintf,gzputc2)
 
 #define _seq_print_fastq(fname,ftype,_printf,_putc)                            \
-    static inline void fname(const read_t *r, ftype fh, int linewrap) {        \
-    size_t i, qlimit = (r->qual.end < r->seq.end ? r->qual.end : r->seq.end);  \
-    int j;                                                                     \
-    if(linewrap <= 0) {                                                        \
+    static inline void fname(const read_t *r, ftype fh, size_t linewrap) {     \
+    size_t i, j, qlimit = (r->qual.end < r->seq.end ? r->qual.end : r->seq.end);\
+    if(linewrap == 0) {                                                        \
       _printf(fh, "@%s\n%s\n+\n%.*s",r->name.b,r->seq.b,(int)qlimit,r->qual.b);\
       for(i = r->qual.end; i < r->seq.end; i++) { _putc(fh, '.'); }            \
       _putc(fh, '\n');                                                         \
