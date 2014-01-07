@@ -176,7 +176,7 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *read)
     {
       int8_t b = bam_seqi(bamseq, j);
       read->seq.b[i] = seq_nt16_str[seq_comp_table[b]];
-      read->qual.b[i] = 33 + bamqual[j];
+      read->qual.b[i] = (char)(33 + bamqual[j]);
     }
   }
   else
@@ -185,7 +185,7 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *read)
     {
       int8_t b = bam_seqi(bamseq, i);
       read->seq.b[i] = seq_nt16_str[b];
-      read->qual.b[i] = 33 + bamqual[i];
+      read->qual.b[i] = (char)(33 + bamqual[i]);
     }
   }
 
