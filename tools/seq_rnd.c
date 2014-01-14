@@ -25,6 +25,8 @@ static char parse_entire_uint(char *str, uint32_t *result)
   return 1;
 }
 
+static void print_usage() __attribute__((noreturn));
+
 static void print_usage()
 {
   fprintf(stderr, "Usage: %s [len]\n", cmdstr);
