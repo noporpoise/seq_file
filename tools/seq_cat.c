@@ -1,3 +1,9 @@
+/*
+https://github.com/noporpoise/seq_file
+Isaac Turner <turner.isaac@gmail.com>
+Jan 2014, Public Domain
+*/
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>

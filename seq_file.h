@@ -1,3 +1,8 @@
+/*
+https://github.com/noporpoise/seq_file
+Isaac Turner <turner.isaac@gmail.com>
+Jan 2014, Public Domain
+*/
 
 #ifndef _SEQ_FILE_HEADER
 #define _SEQ_FILE_HEADER
