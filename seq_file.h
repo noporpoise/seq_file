@@ -266,8 +266,6 @@ static inline void seq_read_reset(read_t *read) {
 #define _func_read_plain(_read_plain,__getc,__readline,__skipline)             \
   static inline int _read_plain(seq_file_t *sf, read_t *read)                  \
   {                                                                            \
-    printf("_read_plain()\n"); \
-    printf("SF: %s\n", sf->path); printf("read: %s\n", read->seq.b); \
     int c;                                                                     \
     seq_read_reset(read);                                                      \
     while((c = __getc(sf)) != -1 && isspace(c)) if(c != '\n') __skipline(sf);  \
@@ -275,7 +273,6 @@ static inline void seq_read_reset(read_t *read) {
     buffer_append_char(&read->seq, (char)c);                                   \
     __readline(sf, read->seq);                                                 \
     buffer_chomp(&(read->seq));                                                \
-    printf("done()\n"); \
     return 1;                                                                  \
   }
 
