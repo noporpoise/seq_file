@@ -132,6 +132,10 @@ static inline read_t* seq_read_alloc(read_t *r)
       return NULL;
     }
   #endif
+  // buffer_init sets begin, end to 1, reset to 0
+  r->name.end = r->seq.end = r->qual.end = 0;
+  r->name.begin = r->seq.begin = r->qual.begin = 0;
+
   return r;
 }
 
