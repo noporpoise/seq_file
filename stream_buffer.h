@@ -1,3 +1,11 @@
+/*
+ stream_buffer.c
+ project: string_buffer
+ url: https://github.com/noporpoise/StringBuffer
+ author: Isaac Turner <turner.isaac@gmail.com>
+ license: Public Domain
+ Jan 2014
+*/
 
 #ifndef _STREAM_BUFFER_HEADER
 #define _STREAM_BUFFER_HEADER
@@ -30,7 +38,7 @@ static inline char buffer_init(buffer_t *b, size_t s)
   b->size = s <= 4 ? 4 : ROUNDUP2POW(s);
   if((b->b = malloc(b->size)) == NULL) return 0;
   b->begin = b->end = 1;
-  b->b[b->size-1] = 0;
+  b->b[b->end] = b->b[b->size-1] = 0;
   return 1;
 }
 

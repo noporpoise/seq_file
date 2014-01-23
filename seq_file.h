@@ -100,6 +100,12 @@ static const int FASTQ_OFFSET[6] = { 33, 33, 64, 64, 64, 33};
 // Create and destroy read structs
 //
 
+static inline void seq_read_reset(read_t *read) {
+  read->name.end = read->seq.end = read->qual.end = 0;
+  read->name.b[0] = read->seq.b[0] = read->qual.b[0] = '\0';
+  read->from_sam = 0;
+}
+
 static inline void seq_read_dealloc(read_t *r)
 {
   if(r->name.b != NULL) free(r->name.b);
@@ -133,8 +139,8 @@ static inline read_t* seq_read_alloc(read_t *r)
     }
   #endif
   // buffer_init sets begin, end to 1, reset to 0
-  r->name.end = r->seq.end = r->qual.end = 0;
   r->name.begin = r->seq.begin = r->qual.begin = 0;
+  seq_read_reset(r);
 
   return r;
 }
@@ -205,13 +211,6 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *read)
   return 1;
 }
 #endif /* _USESAM */
-
-
-static inline void seq_read_reset(read_t *read) {
-  read->name.end = read->seq.end = read->qual.end = 0;
-  read->name.b[0] = read->seq.b[0] = read->qual.b[0] = '\0';
-  read->from_sam = 0;
-}
 
 
 #define _func_read_fastq(_read_fastq,__getc,__ungetc,__readline)               \
@@ -558,6 +557,7 @@ static inline seq_file_t* seq_open(const char *p)
   return seq_open2(p, sam_bam, 1, DEFAULT_BUFSIZE);
 }
 
+// Close file handles, free resources
 static inline void seq_close(seq_file_t *sf)
 {
   if(sf->f_file != NULL) { fclose(sf->f_file); }
