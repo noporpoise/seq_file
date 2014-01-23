@@ -296,20 +296,19 @@ static inline void seq_read_reset(read_t *read) {
 
 #define _SF_SWAP(x,y,tmp) ({(tmp) = (x); (x) = (y); (y) = (tmp);})
 
+// Remove a read from the stack
 // Undefined behaviour if you have not previously called _seq_read_shift
 static inline int _seq_read_pop(seq_file_t *sf, read_t *read)
 {
-  buffer_t tmp;
-  read_t *next = sf->rhead;
+  read_t tmp, *nxtread = sf->rhead;
   sf->rhead = sf->rhead->next;
-  _SF_SWAP(read->name, next->name, tmp);
-  _SF_SWAP(read->seq, next->seq, tmp);
-  _SF_SWAP(read->qual, next->qual, tmp);
-  seq_read_free(next);
+  _SF_SWAP(*read, *nxtread, tmp);
+  seq_read_free(nxtread);
   if(sf->rhead == NULL) {
     sf->read = sf->origread;
     sf->rtail = NULL;
   }
+  read->next = NULL;
   return 1;
 }
 
@@ -765,7 +764,6 @@ _seq_print_fastq(seq_gzprint_fastq,gzFile,gzprintf,gzputc2)
 
 #undef DEFAULT_BUFSIZE
 #undef _SF_SWAP
-// #undef _read_reset
 #undef _sf_gzgetc
 #undef _sf_gzgetc_buf
 #undef _sf_fgetc
