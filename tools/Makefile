@@ -27,7 +27,7 @@ all: ../bin/facat ../bin/fqcat ../bin/seqcat ../bin/seqstat \
 	$(CC) $(OPT) $(CFLAGS) -o ../bin/seqrnd seq_rnd.c
 
 ../bin/seqstat: seq_stat.c ../seq_file.h ../stream_buffer.h | ../bin
-	$(CC) $(OPT) $(CFLAGS) -o ../bin/seqstat seq_stat.c $(LINKING)
+	$(CC) $(OPT) $(CFLAGS) -o ../bin/seqstat seq_stat.c $(LINKING) -lm
 
 ../bin:
 	mkdir ../bin
