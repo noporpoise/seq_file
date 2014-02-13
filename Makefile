@@ -1,5 +1,6 @@
 ifdef HTSLIB
-	PARAMS := $(PARAMS) HTSLIB=$(shell readlink -f $(HTSLIB))
+	ABSPATH=$(shell cd `dirname $(HTSLIB)`; pwd)/$(shell basename $(HTSLIB))
+	PARAMS := $(PARAMS) HTSLIB=$(ABSPATH)
 endif
 
 ifdef DEBUG

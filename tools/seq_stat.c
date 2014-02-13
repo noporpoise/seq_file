@@ -145,7 +145,7 @@ int main(int argc, char **argv)
   printf(" Total seq (bp):    %s\n", nbasesstr);
   printf(" Number of reads:   %s\n", nreadsstr);
   printf(" Longest read (bp): %s\n", maxrlenstr);
-  printf(" Mean read    (bp): %s\n", meanrlenstr);
+  printf(" Mean length  (bp): %s\n", meanrlenstr);
 
   printf("Done.\n");
 
