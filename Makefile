@@ -1,5 +1,5 @@
 ifdef HTSLIB
-	ABSPATH=$(shell cd `dirname $(HTSLIB)`; pwd)/$(shell basename $(HTSLIB))
+	ABSPATH=$(realpath $(HTSLIB))
 	PARAMS := $(PARAMS) HTSLIB=$(ABSPATH)
 endif
 
