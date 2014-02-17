@@ -6,6 +6,8 @@ https://github.com/noporpoise/seq_file
 Isaac Turner <turner.isaac@gmail.com>  
 2 September 2013, license: Public Domain
 
+[![Build Status](https://travis-ci.org/noporpoise/seq_file.png?branch=master)](https://travis-ci.org/noporpoise/seq_file)
+
 About
 =====
 
