@@ -293,7 +293,7 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *r)
     return sf->origreadfunc(sf,r);                                             \
   }
 
-#define _SF_SWAP(x,y,tmp) ({(tmp) = (x); (x) = (y); (y) = (tmp);})
+#define _SF_SWAP(x,y,tmp) do{ (tmp) = (x); (x) = (y); (y) = (tmp); } while(0)
 
 // Remove a read from the stack
 // Undefined behaviour if you have not previously called _seq_read_shift

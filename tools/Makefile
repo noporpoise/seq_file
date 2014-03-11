@@ -2,7 +2,7 @@ ifdef HTSLIB
 	HTSARGS=-I $(HTSLIB)/htslib -D_USESAM=1 $(HTSLIB)/libhts.a -lm
 endif
 
-CFLAGS=-Wall -Wextra -I ..
+CFLAGS=-Wall -Wextra -std=c99 -pedantic -I ..
 LINKING=$(HTSARGS) $(SAMLINK) -lpthread -lz
 
 ifdef DEBUG
