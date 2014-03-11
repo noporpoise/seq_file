@@ -4,6 +4,10 @@ Isaac Turner <turner.isaac@gmail.com>
 Jan 2014, Public Domain
 */
 
+// request decent POSIX version
+#define _XOPEN_SOURCE 700
+#define _BSD_SOURCE
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
