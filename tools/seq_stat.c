@@ -21,7 +21,7 @@ static unsigned int num_of_digits(unsigned long num)
 // result must be long enough for result + 1 ('\0'). Max length required is:
 // strlen('18,446,744,073,709,551,615')+1 = 27
 // returns pointer to result
-static char* ulong_to_str(unsigned long num, char* result)
+char* ulong_to_str(unsigned long num, char* result)
 {
   unsigned int digits = num_of_digits(num);
   unsigned int i, num_commas = (digits-1) / 3;
@@ -41,7 +41,7 @@ static char* ulong_to_str(unsigned long num, char* result)
 // strlen('-9,223,372,036,854,775,808') = 27
 // strlen('.') = 1
 // +1 for \0
-static char* double_to_str(double num, int decimals, char* str)
+char* double_to_str(double num, int decimals, char* str)
 {
   if(isnan(num)) return strcpy(str, "NaN");
   else if(isinf(num)) return strcpy(str, "Inf");
@@ -49,17 +49,16 @@ static char* double_to_str(double num, int decimals, char* str)
   unsigned long whole_units = (unsigned long)num;
   num -= whole_units;
 
+  char decstr[2+decimals+1];
+  sprintf(decstr, "%.*lf", decimals, num);
+  if(decstr[0] == '1') whole_units++;
+
   ulong_to_str(whole_units, str);
 
   if(decimals > 0)
   {
-    // Horrible hack to save character being overwritten with a leading zero
-    // e.g. 12.121 written as '12' then '0.121', giving '10.121', put back '2'
-    // '12.121'
     size_t offset = strlen(str);
-    char c = str[offset-1];
-    sprintf(str+offset-1, "%.*lf", decimals, num);
-    str[offset-1] = c;
+    strcpy(str+offset, decstr+1);
   }
 
   return str;
