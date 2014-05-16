@@ -123,7 +123,8 @@ int main(int argc, char **argv)
     }
   }
 
-  size_t total_len = r.seq.end, max_rlen = r.seq.end, nreads = 0;
+  // We've already read one read
+  size_t total_len = r.seq.end, max_rlen = r.seq.end, nreads = 1;
 
   while(seq_read(f,&r) > 0) {
     total_len += r.seq.end;
