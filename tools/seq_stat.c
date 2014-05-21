@@ -140,12 +140,6 @@ int main(int argc, char **argv)
   ulong_to_str(max_rlen, maxrlenstr);
   double_to_str(mean_rlen, 1, meanrlenstr);
 
-  // Trim excess zeros
-  size_t len = strlen(meanrlenstr);
-  while(len > 0 && meanrlenstr[len-1] == '0') len--;
-  if(meanrlenstr[len-1] == '.') len--;
-  meanrlenstr[len] = '\0';
-
   printf(" Total seq (bp):    %s\n", nbasesstr);
   printf(" Number of reads:   %s\n", nreadsstr);
   printf(" Longest read (bp): %s\n", maxrlenstr);
