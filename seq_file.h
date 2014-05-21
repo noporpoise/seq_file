@@ -108,11 +108,11 @@ static inline void seq_read_reset(read_t *r) {
 
 static inline void seq_read_dealloc(read_t *r)
 {
-  if(r->name.b != NULL) free(r->name.b);
-  if(r->seq.b != NULL) free(r->seq.b);
-  if(r->qual.b != NULL) free(r->qual.b);
+  if(r->name.b != NULL) buffer_dealloc(&r->name);
+  if(r->seq.b != NULL) buffer_dealloc(&r->seq);
+  if(r->qual.b != NULL) buffer_dealloc(&r->qual);
   #ifdef _USESAM
-    if(r->bam != NULL) free(r->bam);
+    if(r->bam != NULL) { free(r->bam); r->bam = NULL; }
   #endif
 }
 
@@ -560,13 +560,14 @@ static inline seq_file_t* seq_open(const char *p)
 // Close file handles, free resources
 static inline void seq_close(seq_file_t *sf)
 {
-  if(sf->f_file != NULL) { fclose(sf->f_file); }
-  if(sf->gz_file != NULL) { gzclose(sf->gz_file); }
+  if(sf->f_file != NULL) { fclose(sf->f_file); sf->f_file = NULL; }
+  if(sf->gz_file != NULL) { gzclose(sf->gz_file); sf->gz_file = NULL; }
   #ifdef _USESAM
-  if(sf->s_file != NULL) { sam_close(sf->s_file); free(sf->bam_header); }
+  if(sf->s_file != NULL) { sam_close(sf->s_file); sf->s_file = NULL; }
+  if(sf->bam_header != NULL) { free(sf->bam_header); sf->bam_header = NULL; }
   #endif
-  if(sf->in.b != NULL) { free(sf->in.b); }
-  if(sf->path != NULL) { free(sf->path); }
+  if(sf->in.b != NULL) { buffer_dealloc(&sf->in); }
+  if(sf->path != NULL) { free(sf->path); sf->path = NULL; }
   read_t *r = sf->rhead, *tmpr;
   while(r != NULL) { tmpr = r->next; seq_read_free(r); r = tmpr; }
   free(sf);
