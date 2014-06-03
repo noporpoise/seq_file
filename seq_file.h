@@ -108,12 +108,13 @@ static inline void seq_read_reset(read_t *r) {
 
 static inline void seq_read_dealloc(read_t *r)
 {
-  if(r->name.b != NULL) buffer_dealloc(&r->name);
-  if(r->seq.b != NULL) buffer_dealloc(&r->seq);
-  if(r->qual.b != NULL) buffer_dealloc(&r->qual);
+  buffer_dealloc(&r->name);
+  buffer_dealloc(&r->seq);
+  buffer_dealloc(&r->qual);
   #ifdef _USESAM
-    if(r->bam != NULL) { free(r->bam); r->bam = NULL; }
+    free(r->bam);
   #endif
+  memset(r, 0, sizeof(read_t));
 }
 
 static inline read_t* seq_read_alloc(read_t *r)
