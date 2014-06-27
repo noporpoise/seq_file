@@ -12,7 +12,7 @@ else
 endif
 
 all: ../bin/facat ../bin/fqcat ../bin/seqcat ../bin/seqstat \
-	   ../bin/revcmp ../bin/seqrnd
+	   ../bin/revcmp ../bin/seqrnd ../bin/dna
 
 ../bin/facat: seq_cat.c ../seq_file.h ../stream_buffer.h | ../bin
 	$(CC) $(OPT) $(CFLAGS) -DFASTA=1 -o ../bin/facat seq_cat.c $(LINKING)
@@ -28,6 +28,9 @@ all: ../bin/facat ../bin/fqcat ../bin/seqcat ../bin/seqstat \
 
 ../bin/seqstat: seq_stat.c ../seq_file.h ../stream_buffer.h | ../bin
 	$(CC) $(OPT) $(CFLAGS) -o ../bin/seqstat seq_stat.c $(LINKING) -lm
+
+../bin/dna: seq_dna.c ../seq_file.h ../stream_buffer.h | ../bin
+	$(CC) $(OPT) $(CFLAGS) -o ../bin/dna seq_dna.c $(LINKING) -lm
 
 ../bin:
 	mkdir ../bin

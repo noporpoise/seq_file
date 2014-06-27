@@ -294,15 +294,15 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *r)
     return sf->origreadfunc(sf,r);                                             \
   }
 
-#define _SF_SWAP(x,y,tmp) do{ (tmp) = (x); (x) = (y); (y) = (tmp); } while(0)
+#define _SF_SWAP(x,y) do { __typeof(x) _tmp = (x); (x) = (y); (y) = _tmp; } while(0)
 
 // Remove a read from the stack
 // Undefined behaviour if you have not previously called _seq_read_shift
 static inline int _seq_read_pop(seq_file_t *sf, read_t *r)
 {
-  read_t tmp, *nxtread = sf->rhead;
+  read_t *nxtread = sf->rhead;
   sf->rhead = sf->rhead->next;
-  _SF_SWAP(*r, *nxtread, tmp);
+  _SF_SWAP(*r, *nxtread);
   seq_read_free(nxtread);
   if(sf->rhead == NULL) {
     sf->readfunc = sf->origreadfunc;
@@ -661,21 +661,45 @@ static inline char _seq_char_complement(char c) {
   }
 }
 
+// Force quality score length to match seq length
+static inline void _seq_read_force_qual_seq_lmatch(read_t *r)
+{
+  size_t i;
+  if(r->qual.end < r->seq.end) {
+    buffer_ensure_capacity(&(r->qual), r->seq.end);
+    for(i = r->qual.end; i < r->seq.end; i++) r->qual.b[i] = '.';
+  }
+  r->qual.b[r->qual.end = r->seq.end] = '\0';
+}
+
+static inline void seq_read_reverse(read_t *r)
+{
+  size_t i, j;
+  if(r->qual.end > 0) _seq_read_force_qual_seq_lmatch(r);
+  if(r->seq.end <= 1) return;
+
+  for(i=0, j=r->seq.end-1; i <= j; i++, j--)
+    _SF_SWAP(r->seq.b[i], r->seq.b[j]);
+
+  if(r->qual.end > 0) {
+    for(i=0, j=r->qual.end-1; i <= j; i++, j--)
+      _SF_SWAP(r->qual.b[i], r->qual.b[j]);
+  }
+}
+
+static inline void seq_read_complement(read_t *r)
+{
+  size_t i;
+  for(i=0; i < r->seq.end; i++)
+    r->seq.b[i] = _seq_char_complement(r->seq.b[i]);
+}
+
 static inline void seq_read_reverse_complement(read_t *r)
 {
   size_t i, j;
   char swap;
 
-  if(r->qual.end > 0)
-  {
-    // Force quality score length to match seq length
-    if(r->qual.end < r->seq.end) {
-      buffer_ensure_capacity(&(r->qual), r->seq.end);
-      for(i = r->qual.end; i < r->seq.end; i++) r->qual.b[i] = '.';
-    }
-    r->qual.b[r->qual.end = r->seq.end] = '\0';
-  }
-
+  if(r->qual.end > 0) _seq_read_force_qual_seq_lmatch(r);
   if(r->seq.end == 0) return;
   if(r->seq.end == 1){ r->seq.b[0] = _seq_char_complement(r->seq.b[0]); return; }
 
@@ -685,13 +709,9 @@ static inline void seq_read_reverse_complement(read_t *r)
     r->seq.b[j] = _seq_char_complement(swap);
   }
 
-  if(r->qual.end > 0)
-  {
-    for(i=0, j=r->qual.end-1; i <= j; i++, j--) {
-      swap = r->qual.b[i];
-      r->qual.b[i] = r->qual.b[j];
-      r->qual.b[j] = swap;
-    }
+  if(r->qual.end > 0) {
+    for(i=0, j=r->qual.end-1; i <= j; i++, j--)
+      _SF_SWAP(r->qual.b[i], r->qual.b[j]);
   }
 }
 
