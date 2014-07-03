@@ -715,6 +715,20 @@ static inline void seq_read_reverse_complement(read_t *r)
   }
 }
 
+// Compare read names up to first whitespace / end of line. Both read names
+// must be of the same length.
+// Returns 0 if they match
+static inline int seq_read_names_cmp(const char *aa, const char *bb)
+{
+  const unsigned char *a = (const unsigned char*)aa, *b = (const unsigned char*)bb;
+
+  // Both match until end of string, or whitespace
+  while(*a && *b && *a == *b && !isspace(*a)) { a++; b++; }
+
+  // One or both of the strings ended
+  return (!*a || isspace(*a)) && (!*b || isspace(*b)) ? 0 : (int)*a - *b;
+}
+
 // Formally, FASTA/Q entry names stop at the first space character
 // Truncates read name and returns new length
 static inline size_t seq_read_truncate_name(read_t *r)
