@@ -16,6 +16,11 @@ Jan 2014, Public Domain
 #include <inttypes.h>
 #include <limits.h> // INT_MAX
 #include <ctype.h> // toupper tolower
+
+#include <time.h>
+#include <sys/time.h> // for seeding random
+#include <unistd.h> // getpid()
+
 #include "seq_file.h"
 
 #define OPS_UPPERCASE   1
@@ -97,6 +102,21 @@ void print_usage(const char *err, ...)
 "  -n,--rand <n>    print <n> random bases BEFORE reading files\n");
 
   exit(EXIT_FAILURE);
+}
+
+// 2 ops per byte h = strhash_fast_mix(h,x)
+#define strhash_fast_mix(h,x) ((h) * 37 + (x))
+
+static void seed_random()
+{
+  struct timeval now;
+  gettimeofday(&now, NULL);
+
+  uint32_t h;
+  h = strhash_fast_mix(0, (uint32_t)now.tv_sec);
+  h = strhash_fast_mix(h, (uint32_t)now.tv_usec);
+  h = strhash_fast_mix(h, (uint32_t)getpid());
+  srand(h);
 }
 
 static void read_print(seq_file_t *sf, read_t *r,
@@ -193,6 +213,8 @@ int main(int argc, char **argv)
 
   if(!nrand_len && !num_inputs)
     print_usage("Please specify at least one input file\n");
+
+  if(nrand_len) seed_random();
 
   read_t r;
   seq_read_alloc(&r);
