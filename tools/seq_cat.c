@@ -22,7 +22,7 @@ Jan 2014, Public Domain
 #define UPPERCASE 1
 #define LOWERCASE 2
 
-char *cmdstr;
+const char *cmdstr;
 
 char parse_entire_uint(char *str, uint32_t *result)
 {
