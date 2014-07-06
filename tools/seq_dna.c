@@ -44,10 +44,11 @@ static struct option longopts[] =
   {"complement", no_argument,       NULL, 'C'},
   {"interleave", no_argument,       NULL, 'i'},
   {"mask",       no_argument,       NULL, 'm'},
+  {"rand",       required_argument, NULL, 'n'},
   {NULL, 0, NULL, 0}
 };
 
-const char shortopts[] = "hfqpw:ulrRCim";
+const char shortopts[] = "hfqpw:ulrRCimn:";
 
 const char *cmdstr;
 
@@ -92,7 +93,8 @@ void print_usage(const char *err, ...)
 "  -R,--reverse     reverse sequence\n"
 "  -C,--complement  complement sequence\n"
 "  -i,--interleave  interleave input files\n"
-"  -m,--mask        mask lowercase bases\n");
+"  -m,--mask        mask lowercase bases\n"
+"  -n,--rand <n>    print <n> random bases BEFORE reading files\n");
 
   exit(EXIT_FAILURE);
 }
@@ -127,6 +129,16 @@ static void read_print(seq_file_t *sf, read_t *r,
   }
 }
 
+static void vector_push(size_t **ptr, size_t *len, size_t *cap, size_t x)
+{
+  if(!*ptr || *len >= *cap) {
+    if(!*cap) { *cap = 16; }
+    else { while(*len >= *cap) { *cap *= 2; }}
+    *ptr = realloc(*ptr, *cap * sizeof(size_t));
+  }
+  (*ptr)[(*len)++] = x;
+}
+
 int main(int argc, char **argv)
 {
   cmdstr = argv[0];
@@ -134,6 +146,8 @@ int main(int argc, char **argv)
   bool interleave = false;
   uint8_t ops = 0, fmt = FORMAT_DEFAULT;
   size_t linewrap = 0;
+
+  size_t *nrand = NULL, nrand_len = 0, nrand_cap = 0, tmprnd = 0;
 
   if(argc == 1) print_usage(NULL);
 
@@ -158,6 +172,11 @@ int main(int argc, char **argv)
       case 'R': ops |= OPS_REVERSE; break;
       case 'C': ops |= OPS_COMPLEMENT; break;
       case 'm': ops |= OPS_MASK; break;
+      case 'n':
+        if(!parse_entire_size(optarg, &tmprnd))
+          print_usage("Bad -n argument: %s\n", optarg);
+        vector_push(&nrand, &nrand_len, &nrand_cap, tmprnd);
+        break;
       case 'i': interleave = true; break;
       case ':': /* BADARG */
       case '?': /* BADCH getopt_long has already printed error */
@@ -166,23 +185,40 @@ int main(int argc, char **argv)
     }
   }
 
-  if(optind >= argc) print_usage("Please specify at least one input file\n");
-
   if(!!(fmt&FORMAT_FASTA) + !!(fmt&FORMAT_FASTQ) + !!(fmt&FORMAT_PLAIN) > 1)
     print_usage("Please specify only one output format (-f,-q,-p)\n");
 
   size_t num_inputs = argc - optind;
   char **input_paths = argv + optind;
 
+  if(!nrand_len && !num_inputs)
+    print_usage("Please specify at least one input file\n");
+
   read_t r;
   seq_read_alloc(&r);
 
   seq_file_t *inputs[num_inputs];
-  size_t i;
+  size_t i, j, rnd = 0;
+  const char bases[] = "ACGT";
 
   for(i = 0; i < num_inputs; i++) {
     if((inputs[i] = seq_open(input_paths[i])) == NULL)
       print_usage("Couldn't read file: %s\n", input_paths[i]);
+  }
+
+  // Print random entries
+  for(i = 0; i < nrand_len; i++) {
+    if(fmt&FORMAT_FASTA) printf(">rand%zu\n", i);
+    else if(fmt&FORMAT_FASTQ) printf("@rand%zu\n", i);
+
+    for(j = 0; j < nrand[i]; j++) {
+      // use 2 bits per iteration, 32 bits in rand(), update every 16 iterations
+      if((j & 15) == 0) rnd = (size_t)rand();
+      fputc(bases[rnd&3], stdout);
+      rnd >>= 2;
+    }
+    if(fmt&FORMAT_FASTQ) printf("\n+\n\n");
+    else fputc('\n', stdout);
   }
 
   if(interleave) {
@@ -205,6 +241,8 @@ int main(int argc, char **argv)
   }
 
   seq_read_dealloc(&r);
+
+  free(nrand);
 
   return EXIT_SUCCESS;
 }
