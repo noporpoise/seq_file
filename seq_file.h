@@ -715,9 +715,10 @@ static inline void seq_read_reverse_complement(read_t *r)
   }
 }
 
-// Compare read names up to first whitespace / end of line. Both read names
-// must be of the same length.
-// Returns 0 if they match
+#define SNAME_END(c) (!(c) || isspace(c))
+
+// Compare read names up to first whitespace / end of string.
+// Returns 0 if they match or match with /1 /2 appended
 static inline int seq_read_names_cmp(const char *aa, const char *bb)
 {
   const unsigned char *a = (const unsigned char*)aa, *b = (const unsigned char*)bb;
@@ -725,9 +726,19 @@ static inline int seq_read_names_cmp(const char *aa, const char *bb)
   // Both match until end of string, or whitespace
   while(*a && *b && *a == *b && !isspace(*a)) { a++; b++; }
 
+  // Special case '/1' '/2'
+  if(a > (unsigned char*)aa && b > (unsigned char*)bb &&
+     *(a-1) == '/' && *(b-1) == '/' &&
+     ((*a == '1' && *b == '2') || (*a == '2' && *b == '1')) &&
+     SNAME_END(a[1]) && SNAME_END(b[1])) {
+    return 0;
+  }
+
   // One or both of the strings ended
-  return (!*a || isspace(*a)) && (!*b || isspace(*b)) ? 0 : (int)*a - *b;
+  return SNAME_END(*a) && SNAME_END(*b) ? 0 : (int)*a - *b;
 }
+
+#undef SNAME_END
 
 // Formally, FASTA/Q entry names stop at the first space character
 // Truncates read name and returns new length
