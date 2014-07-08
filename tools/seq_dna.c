@@ -27,7 +27,28 @@ Jan 2014, Public Domain
 #define OPS_LOWERCASE   2
 #define OPS_REVERSE     4
 #define OPS_COMPLEMENT  8
-#define OPS_MASK       16
+#define OPS_MASK_LC    16 /* Mask lower case bases */
+
+const char usage[] = "  Read and manipulate dna sequence.\n"
+#ifdef _USESAM
+"  Compiled with SAM/BAM support.\n"
+#endif
+"\n"
+"  -h,--help        show this help text\n"
+"  -f,--fasta       print in FASTA format\n"
+"  -q,--fastq       print in FASTQ format\n"
+"  -p,--plain       print in plain format\n"
+"  -w,--wrap <n>    wrap lines by <n> characters [default: 0 (off)]\n"
+"  -u,--uppercase   convert sequence to uppercase\n"
+"  -l,--lowercase   convert sequence to lowercase\n"
+"  -r,--revcmp      reverse complement sequence [i.e. -R and -C]\n"
+"  -R,--reverse     reverse sequence\n"
+"  -C,--complement  complement sequence\n"
+"  -i,--interleave  interleave input files\n"
+"  -m,--mask        mask lowercase bases\n"
+"  -n,--rand <n>    print <n> random bases AFTER reading files\n"
+"  -s,--stat        probe and print file info only\n"
+"  -S,--fast-stat   probe and print file info quickly\n";
 
 static struct option longopts[] =
 {
@@ -45,10 +66,12 @@ static struct option longopts[] =
   {"interleave", no_argument,       NULL, 'i'},
   {"mask",       no_argument,       NULL, 'm'},
   {"rand",       required_argument, NULL, 'n'},
+  {"stat",       required_argument, NULL, 's'},
+  {"fast-stat",  required_argument, NULL, 'S'},
   {NULL, 0, NULL, 0}
 };
 
-const char shortopts[] = "hfqpw:ulrRCimn:";
+const char shortopts[] = "hfqpw:ulrRCimn:sS";
 const char *cmdstr;
 
 const char bases[] = "ACGT";
@@ -64,10 +87,41 @@ char parse_entire_size(const char *str, size_t *result)
   return 1;
 }
 
+size_t num_of_digits(size_t num)
+{
+  size_t digits = 1;
+  while(1) {
+    if(num < 10) return digits;
+    if(num < 100) return digits+1;
+    if(num < 1000) return digits+2;
+    if(num < 10000) return digits+3;
+    num /= 10000;
+    digits += 4;
+  }
+  return digits;
+}
+
+// result must be long enough for result + 1 ('\0'). Max length required is:
+// strlen('18,446,744,073,709,551,615')+1 = 27
+// returns pointer to result
+char* ulong_to_str(unsigned long num, char* result)
+{
+  unsigned int digits = num_of_digits(num);
+  unsigned int i, num_commas = (digits-1) / 3;
+  char *p = result + digits + num_commas;
+  *(p--) = '\0';
+
+  for(i = 0; i < digits; i++, num /= 10) {
+    if(i > 0 && i % 3 == 0) *(p--) = ',';
+    *(p--) = '0' + (num % 10);
+  }
+
+  return result;
+}
+
 void print_usage(const char *err, ...)
 __attribute__((noreturn))
 __attribute__((format(printf, 1, 2)));
-
 
 void print_usage(const char *err, ...)
 {
@@ -83,24 +137,7 @@ void print_usage(const char *err, ...)
   }
 
   fprintf(stderr, "Usage: %s [OPTIONS] <file1> [file2] ..\n", cmdstr);
-  fprintf(stderr, "  Read and manipulate dna sequence.\n"
-#ifdef _USESAM
-"  Compiled with SAM/BAM support.\n"
-#endif
-"\n"
-"  -h,--help        show this help text\n"
-"  -f,--fasta       print in FASTA format\n"
-"  -q,--fastq       print in FASTQ format\n"
-"  -p,--plain       print in plain format\n"
-"  -w,--wrap <n>    wrap lines by <n> characters [default: 0 (off)]\n"
-"  -u,--uppercase   convert sequence to uppercase\n"
-"  -l,--lowercase   convert sequence to lowercase\n"
-"  -r,--revcmp      reverse complement sequence [i.e. -R and -C]\n"
-"  -R,--reverse     reverse sequence\n"
-"  -C,--complement  complement sequence\n"
-"  -i,--interleave  interleave input files\n"
-"  -m,--mask        mask lowercase bases\n"
-"  -n,--rand <n>    print <n> random bases AFTER reading files\n");
+  fputs(usage, stderr);
 
   exit(EXIT_FAILURE);
 }
@@ -120,6 +157,82 @@ static void seed_random()
   srand(h);
 }
 
+// @fast if true skip reading over all reads
+static void file_stat(seq_file_t *sf, read_t *r, bool fast)
+{
+  printf("File: %s\n", sf->path);
+
+  int minq = -1, maxq = -1, s, fmt;
+
+  fmt = seq_guess_fastq_format(sf, &minq, &maxq);
+  s = seq_read(sf,r);
+
+  if(s < 0) {
+    fprintf(stderr, "Error occurred reading file\n");
+    exit(EXIT_FAILURE);
+  }
+
+  if(s == 0) {
+    fprintf(stderr, "  Cannot get any reads from file\n");
+    return;
+  }
+
+  const char zstr[] = " (read with zlib)";
+
+  if(seq_is_sam(sf)) printf("  Format: SAM\n");
+  if(seq_is_bam(sf)) printf("  Format: BAM\n");
+  if(seq_is_fasta(sf)) printf("  Format: FASTA%s\n", seq_use_gzip(sf) ? zstr : "");
+  if(seq_is_fastq(sf)) printf("  Format: FASTQ%s\n", seq_use_gzip(sf) ? zstr : "");
+  if(seq_is_plain(sf)) printf("  Format: plain%s\n", seq_use_gzip(sf) ? zstr : "");
+
+  char print_qstat = (seq_is_fastq(sf) || seq_is_sam(sf) || seq_is_bam(sf));
+
+  if(print_qstat)
+  {
+    if(fmt == -1) printf("  Couldn't get any quality scores\n");
+    else {
+      printf("  Format QScores: %s, offset: %i, min: %i, max: %i, scores: [%i,%i]\n",
+             FASTQ_FORMATS[fmt], FASTQ_OFFSET[fmt], FASTQ_MIN[fmt], FASTQ_MAX[fmt],
+             FASTQ_MIN[fmt]-FASTQ_OFFSET[fmt], FASTQ_MAX[fmt]-FASTQ_OFFSET[fmt]);
+      printf("  QScore range in first 500bp: [%i,%i]\n", minq, maxq);
+    }
+  }
+
+  if(!fast)
+  {
+    // We've already read one read
+    size_t total_len = r->seq.end, nreads = 1;
+    size_t min_rlen = total_len, max_rlen = r->seq.end;
+
+    while((s = seq_read(sf,r)) > 0) {
+      total_len += r->seq.end;
+      max_rlen = r->seq.end > max_rlen ? r->seq.end : max_rlen;
+      min_rlen = r->seq.end < min_rlen ? r->seq.end : min_rlen;
+      nreads++;
+    }
+
+    size_t mean_rlen = (size_t)(((double)total_len / nreads) + 0.5);
+
+    char nbasesstr[50], nreadsstr[50];
+    char minrlenstr[50], maxrlenstr[50], meanrlenstr[50];
+    ulong_to_str(total_len, nbasesstr);
+    ulong_to_str(nreads, nreadsstr);
+    ulong_to_str(min_rlen, minrlenstr);
+    ulong_to_str(max_rlen, maxrlenstr);
+    ulong_to_str(mean_rlen, meanrlenstr);
+
+    printf("  Total seq (bp):     %s\n", nbasesstr);
+    printf("  Number of reads:    %s\n", nreadsstr);
+    printf("  Shortest read (bp): %s\n", minrlenstr);
+    printf("  Longest read  (bp): %s\n", maxrlenstr);
+    printf("  Mean length   (bp): %s\n", meanrlenstr);
+  }
+
+  if(s < 0) { printf("Error reading file: %s\n", sf->path); exit(EXIT_FAILURE); }
+
+  fputc('\n', stdout);
+}
+
 // Returns format used
 static uint8_t read_print(seq_file_t *sf, read_t *r,
                           uint8_t fmt, uint8_t ops, size_t linewrap)
@@ -131,7 +244,7 @@ static uint8_t read_print(seq_file_t *sf, read_t *r,
   else if(ops & OPS_REVERSE)    seq_read_reverse(r);
   else if(ops & OPS_COMPLEMENT) seq_read_complement(r);
 
-  if(ops & OPS_MASK) {
+  if(ops & OPS_MASK_LC) {
     for(i = 0; i < r->seq.end; i++)
       if(islower(r->seq.b[i]))
         r->seq.b[i] = 'N';
@@ -193,7 +306,7 @@ int main(int argc, char **argv)
 {
   cmdstr = argv[0];
 
-  bool interleave = false;
+  bool interleave = false, stat = false, fast_stat = false;
   uint8_t ops = 0, fmt = SEQ_FMT_UNKNOWN;
   size_t i, linewrap = 0;
 
@@ -221,13 +334,15 @@ int main(int argc, char **argv)
       case 'r': ops |= OPS_REVERSE | OPS_COMPLEMENT; break;
       case 'R': ops |= OPS_REVERSE; break;
       case 'C': ops |= OPS_COMPLEMENT; break;
-      case 'm': ops |= OPS_MASK; break;
+      case 'm': ops |= OPS_MASK_LC; break;
       case 'n':
         if(!parse_entire_size(optarg, &tmprnd))
           print_usage("Bad -n argument: %s\n", optarg);
         vector_push(&nrand, &nrand_len, &nrand_cap, tmprnd);
         break;
       case 'i': interleave = true; break;
+      case 's': stat = true; break;
+      case 'S': fast_stat = true; break;
       case ':': /* BADARG */
       case '?': /* BADCH getopt_long has already printed error */
         print_usage("Bad option: %s\n", argv[optind-1]);
@@ -250,6 +365,12 @@ int main(int argc, char **argv)
   if(linewrap && (fmt & SEQ_FMT_PLAIN))
     print_usage("Bad idea to use linewrap with plain output (specify -f or -q)");
 
+  if(stat && (interleave || ops || linewrap || fmt || nrand_len))
+    print_usage("-s,--stat is not compatible with other options");
+
+  if(stat && fast_stat)
+    print_usage("Cannot use -s,--stat and -S--fast-stat together");
+
   if(nrand_len) seed_random();
 
   read_t r;
@@ -262,7 +383,11 @@ int main(int argc, char **argv)
       print_usage("Couldn't read file: %s\n", input_paths[i]);
   }
 
-  if(interleave) {
+  if(stat || fast_stat) {
+    for(i = 0; i < num_inputs; i++)
+      file_stat(inputs[i], &r, fast_stat);
+  }
+  else if(interleave) {
     // read one entry from each file
     size_t waiting_files = num_inputs;
     while(waiting_files) {
