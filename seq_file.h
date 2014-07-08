@@ -30,9 +30,9 @@ Jan 2014, Public Domain
 
 typedef enum
 {
-  SEQ_FMT_UNKNOWN,
-  SEQ_FMT_SAM, SEQ_FMT_BAM,
-  SEQ_FMT_FASTQ, SEQ_FMT_FASTA, SEQ_FMT_PLAIN
+  SEQ_FMT_UNKNOWN = 0,
+  SEQ_FMT_PLAIN = 1, SEQ_FMT_FASTA = 2, SEQ_FMT_FASTQ = 4,
+  SEQ_FMT_SAM = 8, SEQ_FMT_BAM = 16,
 } seq_format;
 
 typedef struct seq_file_t seq_file_t;
@@ -627,27 +627,32 @@ static inline int seq_guess_fastq_format(seq_file_t *sf, int *minq, int *maxq)
   else return 0; // Unknown, assume 33 offset max value 104
 }
 
+// Returns 1 if valid, 0 otherwise
 static inline char _seq_read_looks_valid(read_t *r, const char *alphabet)
 {
+  char valid[128] = {0};
+  for(; *alphabet; alphabet++) valid[(unsigned int)*alphabet] = 1;
   size_t i;
+  unsigned int b, q;
+
   if(r->qual.end != 0) {
     if(r->qual.end != r->seq.end) return 0;
     for(i = 0; i < r->seq.end; i++) {
-      char b = (char)tolower(r->seq.b[i]);
-      char q = r->qual.b[i];
-      if(strchr(alphabet, b) == NULL) return 0;
-      if(q < 33 || q > 105) return 0;
+      b = tolower(r->seq.b[i]);
+      q = r->qual.b[i];
+      if(b >= 128 || !valid[b] || q < 33 || q > 105) return 0;
     }
   }
   else {
     for(i = 0; i < r->seq.end; i++) {
-      char b = (char)tolower(r->seq.b[i]);
-      if(strchr(alphabet, b) == NULL) return 0;
+      b = (char)tolower(r->seq.b[i]);
+      if(b >= 128 || !valid[b]) return 0;
     }
   }
   return 1;
 }
 
+// Returns 1 if valid, 0 otherwise
 #define seq_read_looks_valid_dna(r) _seq_read_looks_valid(r,"acgtn")
 #define seq_read_looks_valid_rna(r) _seq_read_looks_valid(r,"acgun")
 #define seq_read_looks_valid_protein(r) \

@@ -29,11 +29,6 @@ Jan 2014, Public Domain
 #define OPS_COMPLEMENT  8
 #define OPS_MASK       16
 
-#define FORMAT_DEFAULT 0
-#define FORMAT_FASTA   1
-#define FORMAT_FASTQ   2
-#define FORMAT_PLAIN   4
-
 static struct option longopts[] =
 {
 // General options
@@ -77,11 +72,13 @@ __attribute__((format(printf, 1, 2)));
 void print_usage(const char *err, ...)
 {
   if(err != NULL) {
+    fputc('\n', stderr);
     va_list argptr;
     fprintf(stderr, "%s Error: ", cmdstr);
     va_start(argptr, err);
     vfprintf(stderr, err, argptr);
     va_end(argptr);
+    fputc('\n', stderr);
     fputc('\n', stderr);
   }
 
@@ -103,7 +100,7 @@ void print_usage(const char *err, ...)
 "  -C,--complement  complement sequence\n"
 "  -i,--interleave  interleave input files\n"
 "  -m,--mask        mask lowercase bases\n"
-"  -n,--rand <n>    print <n> random bases BEFORE reading files\n");
+"  -n,--rand <n>    print <n> random bases AFTER reading files\n");
 
   exit(EXIT_FAILURE);
 }
@@ -123,8 +120,9 @@ static void seed_random()
   srand(h);
 }
 
-static void read_print(seq_file_t *sf, read_t *r,
-                       uint8_t fmt, uint8_t ops, size_t linewrap)
+// Returns format used
+static uint8_t read_print(seq_file_t *sf, read_t *r,
+                          uint8_t fmt, uint8_t ops, size_t linewrap)
 {
   size_t i;
   if(ops & OPS_UPPERCASE)  seq_read_to_uppercase(r);
@@ -140,17 +138,19 @@ static void read_print(seq_file_t *sf, read_t *r,
   }
 
   if(fmt == 0) {
-    if(seq_is_plain(sf)) fmt = FORMAT_PLAIN;
-    else if(seq_is_fasta(sf)) fmt = FORMAT_FASTA;
-    else fmt = FORMAT_FASTQ;
+    if(seq_is_plain(sf)) fmt = SEQ_FMT_PLAIN;
+    else if(seq_is_fasta(sf)) fmt = SEQ_FMT_FASTA;
+    else fmt = SEQ_FMT_FASTQ;
   }
 
   switch(fmt) {
-    case FORMAT_FASTA: seq_print_fasta(r, stdout, linewrap); break;
-    case FORMAT_FASTQ: seq_print_fastq(r, stdout, linewrap); break;
-    case FORMAT_PLAIN: fputs(r->seq.b, stdout); fputc('\n', stdout); break;
+    case SEQ_FMT_FASTA: seq_print_fasta(r, stdout, linewrap); break;
+    case SEQ_FMT_FASTQ: seq_print_fastq(r, stdout, linewrap); break;
+    case SEQ_FMT_PLAIN: fputs(r->seq.b, stdout); fputc('\n', stdout); break;
     default: fprintf(stderr, "Got value: %i\n", (int)fmt); abort();
   }
+
+  return fmt;
 }
 
 static inline void _print_rnd_entries(const size_t *lens, size_t nentries,
@@ -158,8 +158,8 @@ static inline void _print_rnd_entries(const size_t *lens, size_t nentries,
 {
   size_t i, j, k, rnd = 0;
   for(i = 0; i < nentries; i++) {
-    if(fmt&FORMAT_FASTA) printf(">rand%zu\n", i);
-    else if(fmt&FORMAT_FASTQ) printf("@rand%zu\n", i);
+    if(fmt&SEQ_FMT_FASTA) printf(">rand%zu\n", i);
+    else if(fmt&SEQ_FMT_FASTQ) printf("@rand%zu\n", i);
 
     for(j = k = 0; j < lens[i]; j++, k++) {
       if(linewrap && k == linewrap) { k = 0; fputc('\n', stdout); }
@@ -168,7 +168,7 @@ static inline void _print_rnd_entries(const size_t *lens, size_t nentries,
       fputc(bases[rnd&3], stdout);
       rnd >>= 2;
     }
-    if(fmt&FORMAT_FASTQ) { /* quality scores */
+    if(fmt&SEQ_FMT_FASTQ) { /* quality scores */
       fputs("\n+\n", stdout);
       for(j = k = 0; j < lens[i]; j++, k++) {
         if(linewrap && k == linewrap) { k = 0; fputc('\n', stdout); }
@@ -194,7 +194,7 @@ int main(int argc, char **argv)
   cmdstr = argv[0];
 
   bool interleave = false;
-  uint8_t ops = 0, fmt = FORMAT_DEFAULT;
+  uint8_t ops = 0, fmt = SEQ_FMT_UNKNOWN;
   size_t i, linewrap = 0;
 
   size_t *nrand = NULL, nrand_len = 0, nrand_cap = 0, tmprnd = 0;
@@ -209,9 +209,9 @@ int main(int argc, char **argv)
     switch(c) {
       case 0: /* flag set */ break;
       case 'h': print_usage(NULL); break;
-      case 'f': fmt |= FORMAT_FASTA; break;
-      case 'q': fmt |= FORMAT_FASTQ; break;
-      case 'p': fmt |= FORMAT_PLAIN; break;
+      case 'f': fmt |= SEQ_FMT_FASTA; break;
+      case 'q': fmt |= SEQ_FMT_FASTQ; break;
+      case 'p': fmt |= SEQ_FMT_PLAIN; break;
       case 'w':
         if(!parse_entire_size(optarg, &linewrap))
           print_usage("Bad -w argument: %s\n", optarg);
@@ -235,7 +235,7 @@ int main(int argc, char **argv)
     }
   }
 
-  if(!!(fmt&FORMAT_FASTA) + !!(fmt&FORMAT_FASTQ) + !!(fmt&FORMAT_PLAIN) > 1)
+  if(!!(fmt&SEQ_FMT_FASTA) + !!(fmt&SEQ_FMT_FASTQ) + !!(fmt&SEQ_FMT_PLAIN) > 1)
     print_usage("Please specify only one output format (-f,-q,-p)\n");
 
   size_t num_inputs = argc - optind;
@@ -243,6 +243,12 @@ int main(int argc, char **argv)
 
   if(!nrand_len && !num_inputs)
     print_usage("Please specify at least one input file\n");
+
+  // Default to plain format for random output
+  if(!num_inputs && !fmt) fmt = SEQ_FMT_PLAIN;
+
+  if(linewrap && (fmt & SEQ_FMT_PLAIN))
+    print_usage("Bad idea to use linewrap with plain output (specify -f or -q)");
 
   if(nrand_len) seed_random();
 
@@ -256,16 +262,14 @@ int main(int argc, char **argv)
       print_usage("Couldn't read file: %s\n", input_paths[i]);
   }
 
-  // Print random entries
-  _print_rnd_entries(nrand, nrand_len, fmt, linewrap);
-
   if(interleave) {
     // read one entry from each file
     size_t waiting_files = num_inputs;
     while(waiting_files) {
       for(i = 0; i < num_inputs; i++) {
         if(inputs[i] != NULL) {
-          if(seq_read(inputs[i],&r) > 0) read_print(inputs[i], &r, fmt, ops, linewrap);
+          if(seq_read(inputs[i],&r) > 0)
+            fmt = read_print(inputs[i], &r, fmt, ops, linewrap);
           else { seq_close(inputs[i]); inputs[i] = NULL; waiting_files--; }
         }
       }
@@ -273,13 +277,16 @@ int main(int argc, char **argv)
   }
   else {
     for(i = 0; i < num_inputs; i++) {
-      while(seq_read(inputs[i],&r) > 0) read_print(inputs[i], &r, fmt, ops, linewrap);
+      while(seq_read(inputs[i],&r) > 0)
+        fmt = read_print(inputs[i], &r, fmt, ops, linewrap);
       seq_close(inputs[i]);
     }
   }
 
   seq_read_dealloc(&r);
 
+  // Print random entries
+  _print_rnd_entries(nrand, nrand_len, fmt, linewrap);
   free(nrand);
 
   return EXIT_SUCCESS;
