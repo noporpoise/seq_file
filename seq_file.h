@@ -722,13 +722,13 @@ static inline void seq_read_reverse_complement(read_t *r)
 static inline int seq_read_names_cmp(const char *aa, const char *bb)
 {
   const unsigned char *a = (const unsigned char*)aa, *b = (const unsigned char*)bb;
+  const unsigned char *start_a = a, *start_b = b;
 
   // Both match until end of string, or whitespace
   while(*a && *b && *a == *b && !isspace(*a)) { a++; b++; }
 
   // Special case '/1' '/2'
-  if(a > (unsigned char*)aa && b > (unsigned char*)bb &&
-     *(a-1) == '/' && *(b-1) == '/' &&
+  if(a > start_a && b > start_b && *(a-1) == '/' && *(b-1) == '/' &&
      ((*a == '1' && *b == '2') || (*a == '2' && *b == '1')) &&
      SNAME_END(a[1]) && SNAME_END(b[1])) {
     return 0;
