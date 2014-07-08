@@ -54,8 +54,9 @@ static struct option longopts[] =
 };
 
 const char shortopts[] = "hfqpw:ulrRCimn:";
-
 const char *cmdstr;
+
+const char bases[] = "ACGT";
 
 char parse_entire_size(const char *str, size_t *result)
 {
@@ -86,6 +87,9 @@ void print_usage(const char *err, ...)
 
   fprintf(stderr, "Usage: %s [OPTIONS] <file1> [file2] ..\n", cmdstr);
   fprintf(stderr, "  Read and manipulate dna sequence.\n"
+#ifdef _USESAM
+"  Compiled with SAM/BAM support.\n"
+#endif
 "\n"
 "  -h,--help        show this help text\n"
 "  -f,--fasta       print in FASTA format\n"
@@ -149,6 +153,32 @@ static void read_print(seq_file_t *sf, read_t *r,
   }
 }
 
+static inline void _print_rnd_entries(const size_t *lens, size_t nentries,
+                                      uint8_t fmt, size_t linewrap)
+{
+  size_t i, j, k, rnd = 0;
+  for(i = 0; i < nentries; i++) {
+    if(fmt&FORMAT_FASTA) printf(">rand%zu\n", i);
+    else if(fmt&FORMAT_FASTQ) printf("@rand%zu\n", i);
+
+    for(j = k = 0; j < lens[i]; j++, k++) {
+      if(linewrap && k == linewrap) { k = 0; fputc('\n', stdout); }
+      // use 2 bits per iteration, 32 bits in rand(), update every 16 iterations
+      if((j & 15) == 0) rnd = (size_t)rand();
+      fputc(bases[rnd&3], stdout);
+      rnd >>= 2;
+    }
+    if(fmt&FORMAT_FASTQ) { /* quality scores */
+      fputs("\n+\n", stdout);
+      for(j = k = 0; j < lens[i]; j++, k++) {
+        if(linewrap && k == linewrap) { k = 0; fputc('\n', stdout); }
+        fputc('.', stdout);
+      }
+    }
+    fputc('\n', stdout);
+  }
+}
+
 static void vector_push(size_t **ptr, size_t *len, size_t *cap, size_t x)
 {
   if(!*ptr || *len >= *cap) {
@@ -165,7 +195,7 @@ int main(int argc, char **argv)
 
   bool interleave = false;
   uint8_t ops = 0, fmt = FORMAT_DEFAULT;
-  size_t linewrap = 0;
+  size_t i, linewrap = 0;
 
   size_t *nrand = NULL, nrand_len = 0, nrand_cap = 0, tmprnd = 0;
 
@@ -220,8 +250,6 @@ int main(int argc, char **argv)
   seq_read_alloc(&r);
 
   seq_file_t *inputs[num_inputs];
-  size_t i, j, rnd = 0;
-  const char bases[] = "ACGT";
 
   for(i = 0; i < num_inputs; i++) {
     if((inputs[i] = seq_open(input_paths[i])) == NULL)
@@ -229,19 +257,7 @@ int main(int argc, char **argv)
   }
 
   // Print random entries
-  for(i = 0; i < nrand_len; i++) {
-    if(fmt&FORMAT_FASTA) printf(">rand%zu\n", i);
-    else if(fmt&FORMAT_FASTQ) printf("@rand%zu\n", i);
-
-    for(j = 0; j < nrand[i]; j++) {
-      // use 2 bits per iteration, 32 bits in rand(), update every 16 iterations
-      if((j & 15) == 0) rnd = (size_t)rand();
-      fputc(bases[rnd&3], stdout);
-      rnd >>= 2;
-    }
-    if(fmt&FORMAT_FASTQ) printf("\n+\n\n");
-    else fputc('\n', stdout);
-  }
+  _print_rnd_entries(nrand, nrand_len, fmt, linewrap);
 
   if(interleave) {
     // read one entry from each file

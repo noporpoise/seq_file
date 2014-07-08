@@ -30,11 +30,10 @@ Jan 2014, Public Domain
 
 typedef enum
 {
-  IS_ERROR, IS_UNKNOWN,
-  IS_SEQ_UNKNOWN, // could be FASTQ, FASTQ or plain
-  IS_SAM, IS_BAM,
-  IS_FASTQ, IS_FASTA, IS_PLAIN
-} seqtype_t;
+  SEQ_FMT_UNKNOWN,
+  SEQ_FMT_SAM, SEQ_FMT_BAM,
+  SEQ_FMT_FASTQ, SEQ_FMT_FASTA, SEQ_FMT_PLAIN
+} seq_format;
 
 typedef struct seq_file_t seq_file_t;
 typedef struct read_t read_t;
@@ -50,7 +49,7 @@ struct seq_file_t
   #endif
   int (*readfunc)(seq_file_t *sf, read_t *r);
   buffer_t in;
-  seqtype_t format;
+  seq_format format;
   // Reads pushed onto a 'read stack' aka buffer
   read_t *rhead, *rtail; // 'unread' reads, add to tail, return from head
   int (*origreadfunc)(seq_file_t *sf, read_t *r); // used when read = _seq_read_pop
@@ -66,15 +65,15 @@ struct read_t
   char from_sam; // from sam or bam
 };
 
-#define seq_is_bam(sf) ((sf)->format == IS_BAM)
-#define seq_is_sam(sf) ((sf)->format == IS_SAM)
+#define seq_is_bam(sf) ((sf)->format == SEQ_FMT_BAM)
+#define seq_is_sam(sf) ((sf)->format == SEQ_FMT_SAM)
 #define seq_use_gzip(sf) ((sf)->gz_file != NULL)
 
 // The following require a read to have been read successfully first
 // using seq_read
-#define seq_is_fastq(sf) ((sf)->format == IS_FASTQ)
-#define seq_is_fasta(sf) ((sf)->format == IS_FASTA)
-#define seq_is_plain(sf) ((sf)->format == IS_PLAIN)
+#define seq_is_fastq(sf) ((sf)->format == SEQ_FMT_FASTQ)
+#define seq_is_fasta(sf) ((sf)->format == SEQ_FMT_FASTA)
+#define seq_is_plain(sf) ((sf)->format == SEQ_FMT_PLAIN)
 
 #define seq_get_path(sf) ((sf)->path)
 
@@ -287,14 +286,15 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *r)
     seq_read_reset(r);                                                         \
     while((c = __getc(sf)) != -1 && isspace(c)) if(c != '\n') __skipline(sf);  \
     if(c == -1) return 0;                                                      \
-    if(c == '@') { sf->format = IS_FASTQ; sf->origreadfunc = __fastq; }        \
-    else if(c == '>') { sf->format = IS_FASTA; sf->origreadfunc = __fasta; }   \
-    else { sf->format = IS_PLAIN; sf->origreadfunc = __plain; }                \
+    if(c == '@') { sf->format = SEQ_FMT_FASTQ; sf->origreadfunc = __fastq; }   \
+    else if(c == '>') { sf->format = SEQ_FMT_FASTA; sf->origreadfunc = __fasta;}\
+    else { sf->format = SEQ_FMT_PLAIN; sf->origreadfunc = __plain; }           \
     __ungetc(sf, c);                                                           \
     return sf->origreadfunc(sf,r);                                             \
   }
 
 #define _SF_SWAP(x,y) do { __typeof(x) _tmp = (x); (x) = (y); (y) = _tmp; } while(0)
+#define _SF_MIN(x,y) ((x) < (y) ? (x) : (y))
 
 // Remove a read from the stack
 // Undefined behaviour if you have not previously called _seq_read_shift
@@ -406,7 +406,7 @@ static inline void _seq_file_init(seq_file_t *sf)
   #endif
   sf->in.size = sf->in.begin = sf->in.end = 0;
   sf->path = sf->in.b = NULL;
-  sf->format = IS_UNKNOWN;
+  sf->format = SEQ_FMT_UNKNOWN;
   sf->rhead = sf->rtail = NULL;
 }
 
@@ -422,13 +422,13 @@ static inline char _seq_setup(seq_file_t *sf, char use_zlib, size_t buf_size)
   return 1;
 }
 
-#define _NUM_SEQ_EXT 28
+#define NUM_SEQ_EXT 28
 
 // Guess file type from file path or contents
-static inline seqtype_t seq_guess_filetype_from_extension(const char *path)
+static inline seq_format seq_guess_filetype_from_extension(const char *path)
 {
   size_t plen = strlen(path);
-  const char *exts[_NUM_SEQ_EXT]
+  const char *exts[NUM_SEQ_EXT]
     = {".fa", ".fasta", ".fsa", ".fsa.gz", "fsa.gzip", // FASTA
        ".faz", ".fagz", ".fa.gz", ".fa.gzip", ".fastaz", ".fasta.gzip",
        ".fq", ".fastq", ".fsq", ".fsq.gz", "fsq.gzip", // FASTQ
@@ -436,27 +436,29 @@ static inline seqtype_t seq_guess_filetype_from_extension(const char *path)
        ".txt", ".txtgz", ".txt.gz", ".txt.gzip", // Plain
        ".sam", ".bam"}; // SAM / BAM
 
-  const seqtype_t types[_NUM_SEQ_EXT]
-    = {IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA,
-       IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA, IS_FASTA,
-       IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ,
-       IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ, IS_FASTQ,
-       IS_PLAIN, IS_PLAIN, IS_PLAIN, IS_PLAIN,
-       IS_SAM, IS_BAM};
+  const seq_format types[NUM_SEQ_EXT]
+    = {SEQ_FMT_FASTA, SEQ_FMT_FASTA, SEQ_FMT_FASTA, SEQ_FMT_FASTA, SEQ_FMT_FASTA,
+       SEQ_FMT_FASTA, SEQ_FMT_FASTA, SEQ_FMT_FASTA, SEQ_FMT_FASTA, SEQ_FMT_FASTA,
+       SEQ_FMT_FASTA,
+       SEQ_FMT_FASTQ, SEQ_FMT_FASTQ, SEQ_FMT_FASTQ, SEQ_FMT_FASTQ, SEQ_FMT_FASTQ,
+       SEQ_FMT_FASTQ, SEQ_FMT_FASTQ, SEQ_FMT_FASTQ, SEQ_FMT_FASTQ, SEQ_FMT_FASTQ,
+       SEQ_FMT_FASTQ,
+       SEQ_FMT_PLAIN, SEQ_FMT_PLAIN, SEQ_FMT_PLAIN, SEQ_FMT_PLAIN,
+       SEQ_FMT_SAM, SEQ_FMT_BAM};
 
-  size_t extlens[_NUM_SEQ_EXT];
+  size_t extlens[NUM_SEQ_EXT];
   size_t i;
-  for(i = 0; i < _NUM_SEQ_EXT; i++)
+  for(i = 0; i < NUM_SEQ_EXT; i++)
     extlens[i] = strlen(exts[i]);
 
-  for(i = 0; i < _NUM_SEQ_EXT; i++)
+  for(i = 0; i < NUM_SEQ_EXT; i++)
     if(extlens[i] <= plen && strcasecmp(path+plen-extlens[i], exts[i]) == 0)
       return types[i];
 
-  return IS_UNKNOWN;
+  return SEQ_FMT_UNKNOWN;
 }
 
-#undef _NUM_SEQ_EXT
+#undef NUM_SEQ_EXT
 
 // sam_bam is 0 for not SAM/BAM, 1 for SAM, 2 for BAM
 static inline seq_file_t* seq_open2(const char *p, char sam_bam,
@@ -480,7 +482,7 @@ static inline seq_file_t* seq_open2(const char *p, char sam_bam,
       }
       sf->bam_header = sam_hdr_read(sf->s_file);
       sf->readfunc = sf->origreadfunc = _seq_read_sam;
-      sf->format = sam_bam == 1 ? IS_SAM : IS_BAM;
+      sf->format = sam_bam == 1 ? SEQ_FMT_SAM : SEQ_FMT_BAM;
     #else
       fprintf(stderr, "[%s:%i] Error: not compiled with sam/bam support\n",
               __FILE__, __LINE__);
@@ -551,10 +553,10 @@ static inline seq_file_t* seq_open(const char *p)
 {
   if(strcmp(p,"-") == 0) return seq_open_fh(stdin, 0, 1, DEFAULT_BUFSIZE);
 
-  seqtype_t format = seq_guess_filetype_from_extension(p);
+  seq_format format = seq_guess_filetype_from_extension(p);
   char sam_bam = 0;
-  if(format == IS_SAM) sam_bam = 1;
-  if(format == IS_BAM) sam_bam = 2;
+  if(format == SEQ_FMT_SAM) sam_bam = 1;
+  if(format == SEQ_FMT_BAM) sam_bam = 2;
   return seq_open2(p, sam_bam, 1, DEFAULT_BUFSIZE);
 }
 
@@ -763,42 +765,50 @@ static inline void seq_read_to_lowercase(read_t *r)
   for(tmp = r->seq.b; *tmp != '\0'; tmp++) *tmp = (char)tolower(*tmp);
 }
 
-#define _seq_print_wrap(fh,str,len,wrap,i,j,_putc) do { \
-    for(i=0,j=0;i<len;i++,j++) { \
-      if(j==wrap) { _putc((fh),'\n'); j = 0; } \
-      _putc((fh),str[i]); \
-    } \
-  } while(0)
+// j is newline counter
+#define _seq_print_wrap(fh,str,len,wrap,j,_putc) do \
+{ \
+  size_t _i; \
+  for(_i = 0; _i < len; _i++, j++) { \
+    if(j == wrap) { _putc((fh), '\n'); j = 0; } \
+    _putc((fh), str[_i]); \
+  } \
+} while(0)
 
-#define _seq_print_fasta(fname,ftype,_printf,_putc)                            \
+#define _seq_print_fasta(fname,ftype,_puts,_putc)                              \
   static inline void fname(const read_t *r, ftype fh, size_t linewrap) {       \
-    if(linewrap == 0)  _printf(fh, ">%s\n%s\n", r->name.b, r->seq.b);          \
-    else {                                                                     \
-      size_t i, j;                                                             \
-      _printf(fh, ">%s\n", r->name.b);                                         \
-      _seq_print_wrap(fh, r->seq.b, r->seq.end, linewrap, i, j, _putc);        \
-      _putc(fh, '\n');                                                         \
-    }                                                                          \
+    size_t j = 0;                                                              \
+    _putc(fh, '>');                                                            \
+    _puts(fh, r->name.b);                                                      \
+    _putc(fh, '\n');                                                           \
+    if(linewrap == 0) _puts(fh, r->seq.b);                                     \
+    else _seq_print_wrap(fh, r->seq.b, r->seq.end, linewrap, j, _putc);        \
+    _putc(fh, '\n');                                                           \
   }                                                                            \
 
-_seq_print_fasta(seq_print_fasta,FILE*,fprintf,fputc2)
-_seq_print_fasta(seq_gzprint_fasta,gzFile,gzprintf,gzputc2)
+_seq_print_fasta(seq_print_fasta,FILE*,fputs2,fputc2)
+_seq_print_fasta(seq_gzprint_fasta,gzFile,gzputs2,gzputc2)
 
-#define _seq_print_fastq(fname,ftype,_printf,_putc)                            \
+#define _seq_print_fastq(fname,ftype,_puts,_putc)                              \
   static inline void fname(const read_t *r, ftype fh, size_t linewrap) {       \
-    size_t i, j, qlimit = (r->qual.end < r->seq.end ? r->qual.end : r->seq.end);\
+    _putc(fh, '@');                                                            \
+    _puts(fh, r->name.b);                                                      \
+    _putc(fh, '\n');                                                           \
+    size_t i, j = 0, qlimit = _SF_MIN(r->qual.end, r->seq.end);                \
     if(linewrap == 0) {                                                        \
-      _printf(fh, "@%s\n%s\n+\n%.*s",r->name.b,r->seq.b,(int)qlimit,r->qual.b);\
-      for(i = r->qual.end; i < r->seq.end; i++) { _putc(fh, '.'); }            \
+      _puts(fh, r->seq.b);                                                     \
+      _puts(fh, "\n+\n");                                                      \
+      for(i = 0;      i < qlimit;      i++) { _putc(fh, r->qual.b[i]); }       \
+      for(i = qlimit; i < r->seq.end;  i++) { _putc(fh, '.'); }                \
       _putc(fh, '\n');                                                         \
     }                                                                          \
     else {                                                                     \
-      _printf(fh, "@%s\n", r->name.b);                                         \
-      _seq_print_wrap(fh, r->seq.b, r->seq.end, linewrap, i, j, _putc);        \
-      _printf(fh, "\n+\n");                                                    \
-      _seq_print_wrap(fh, r->qual.b, qlimit, linewrap, i, j, _putc);           \
+      _seq_print_wrap(fh, r->seq.b, r->seq.end, linewrap, j, _putc);           \
+      _puts(fh, "\n+\n");                                                      \
+      j=0; /* reset j after printing new line */                               \
+      _seq_print_wrap(fh, r->qual.b, qlimit, linewrap, j, _putc);              \
       /* If i < seq.end, pad quality scores */                                 \
-      for(; i < r->seq.end; i++, j++) {                                        \
+      for(i = qlimit; i < r->seq.end; i++, j++) {                              \
         if(j == linewrap) { _putc(fh, '\n'); j = 0; }                          \
         _putc(fh, '.');                                                        \
       }                                                                        \
@@ -806,11 +816,12 @@ _seq_print_fasta(seq_gzprint_fasta,gzFile,gzprintf,gzputc2)
     }                                                                          \
   }
 
-_seq_print_fastq(seq_print_fastq,FILE*,fprintf,fputc2)
-_seq_print_fastq(seq_gzprint_fastq,gzFile,gzprintf,gzputc2)
+_seq_print_fastq(seq_print_fastq,FILE*,fputs2,fputc2)
+_seq_print_fastq(seq_gzprint_fastq,gzFile,gzputs2,gzputc2)
 
 #undef DEFAULT_BUFSIZE
 #undef _SF_SWAP
+#undef _SF_MIN
 #undef _sf_gzgetc
 #undef _sf_gzgetc_buf
 #undef _sf_fgetc

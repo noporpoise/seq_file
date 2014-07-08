@@ -1,3 +1,6 @@
+# To compile SAM/BAM support:
+#     make HTSLIB=../htslib
+
 ifdef HTSLIB
 	ABSPATH=$(realpath $(HTSLIB))
 	PARAMS := $(PARAMS) HTSLIB=$(ABSPATH)
