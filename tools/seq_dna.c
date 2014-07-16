@@ -270,7 +270,9 @@ static inline void _print_rnd_entries(const size_t *lens, size_t nentries,
                                       uint8_t fmt, size_t linewrap)
 {
   size_t i, j, k, rnd = 0;
-  for(i = 0; i < nentries; i++) {
+
+  for(i = 0; i < nentries; i++)
+  {
     if(fmt&SEQ_FMT_FASTA) printf(">rand%zu\n", i);
     else if(fmt&SEQ_FMT_FASTQ) printf("@rand%zu\n", i);
 
@@ -285,7 +287,7 @@ static inline void _print_rnd_entries(const size_t *lens, size_t nentries,
       fputs("\n+\n", stdout);
       for(j = k = 0; j < lens[i]; j++, k++) {
         if(linewrap && k == linewrap) { k = 0; fputc('\n', stdout); }
-        fputc('.', stdout);
+        fputc(33+rand()%41, stdout); // 33..73
       }
     }
     fputc('\n', stdout);
