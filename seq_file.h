@@ -48,7 +48,7 @@ struct seq_file_t
     bam_hdr_t *bam_header;
   #endif
   int (*readfunc)(seq_file_t *sf, read_t *r);
-  buffer_t in;
+  CharBuffer in;
   seq_format format;
   // Reads pushed onto a 'read stack' aka buffer
   read_t *rhead, *rtail; // 'unread' reads, add to tail, return from head
@@ -57,7 +57,7 @@ struct seq_file_t
 
 struct read_t
 {
-  buffer_t name, seq, qual;
+  CharBuffer name, seq, qual;
   #ifdef _USESAM
     bam1_t *bam;
   #endif
@@ -125,9 +125,9 @@ static inline read_t* seq_read_alloc(read_t *r)
   r->bam = NULL;
   #endif
 
-  if(!buffer_init(&r->name, 256) ||
-     !buffer_init(&r->seq, 256) ||
-     !buffer_init(&r->qual, 256))
+  if(!buffer_alloc(&r->name, 256) ||
+     !buffer_alloc(&r->seq, 256) ||
+     !buffer_alloc(&r->qual, 256))
   {
     seq_read_dealloc(r);
     return NULL;
@@ -138,7 +138,7 @@ static inline read_t* seq_read_alloc(read_t *r)
       return NULL;
     }
   #endif
-  // buffer_init sets begin, end to 1, reset to 0
+  // buffer_alloc sets begin, end to 1, reset to 0
   r->name.begin = r->seq.begin = r->qual.begin = 0;
   seq_read_reset(r);
 
@@ -414,7 +414,7 @@ static inline void _seq_file_init(seq_file_t *sf)
 static inline char _seq_setup(seq_file_t *sf, char use_zlib, size_t buf_size)
 {
   if(buf_size) {
-    if(!buffer_init(&sf->in, buf_size)) { free(sf); return 0; }
+    if(!buffer_alloc(&sf->in, buf_size)) { free(sf); return 0; }
     sf->origreadfunc = use_zlib ? _seq_read_unknown_gz_buf : _seq_read_unknown_f_buf;
   }
   else sf->origreadfunc = use_zlib ? _seq_read_unknown_gz : _seq_read_unknown_f;
