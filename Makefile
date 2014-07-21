@@ -10,18 +10,36 @@ ifdef DEBUG
 	PARAMS := $(PARAMS) DEBUG=$(DEBUG)
 endif
 
-all: tools benchmarks dev
+#
+# Compile dnacat
+#
+ifdef HTSLIB
+	HTSARGS=-I $(HTSLIB)/htslib -D_USESAM=1 $(HTSLIB)/libhts.a -lm
+endif
 
-tools:
-	cd tools; make $(PARAMS)
+CFLAGS=-Wall -Wextra -std=c99 -pedantic -I.
+LINKING=$(HTSARGS) -lpthread -lz
+
+ifdef DEBUG
+	OPT = -O0 --debug -g
+else
+	OPT = -O3
+endif
+
+all: bin/dnacat benchmarks dev
+
+bin/dnacat: tools/dna_cat.c
+	mkdir -p bin
+	$(CC) $(CFLAGS) $(OPT) -o $@ $< $(LINKING) -lm
+
 benchmarks:
 	cd benchmarks; make $(PARAMS)
 dev:
 	cd dev; make $(PARAMS)
 
 clean:
-	cd tools; make clean
+	rm -rf bin
 	cd benchmarks; make clean
 	cd dev; make clean
 
-.PHONY: all clean tools benchmarks dev
+.PHONY: all clean benchmarks dev

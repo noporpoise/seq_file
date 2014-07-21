@@ -4,7 +4,7 @@ seq_file
 C Library for reading multiple bioinformatics sequence file formats  
 https://github.com/noporpoise/seq_file  
 Isaac Turner <turner.isaac@gmail.com>  
-2 September 2013, license: Public Domain
+21 July 2014, license: Public Domain
 
 [![Build Status](https://travis-ci.org/noporpoise/seq_file.png?branch=master)](https://travis-ci.org/noporpoise/seq_file)
 
@@ -17,7 +17,7 @@ Pass a file to `seq_open(path)` and then read sequences using `seq_read(...)`.
 File format is automatically detected.
 
 Currently supports:
-* SAM & BAM (if compiled with htslib)
+* SAM & BAM (if compiled with htslib with `make HTSLIB=`)
 * FASTA (& gzipped fasta)
 * FASTQ (& gzipped fastq)
 * 'plain' format (one sequence per line [.txt]) (& gzipped plain [.txt.gz])
@@ -40,11 +40,56 @@ or without (you won't be able to read sam/bam files)
 Tools
 =====
 
-Also included are some tools that use seq_file:
-* `facat`: print file as FASTA
-* `fqcat`: print file as FASTQ
-* `seqcat`: print file sequence-only one entry per line ('plain' format)
-* `seqstat`: print details about a sequence file
+Also included is a tool for reading, converting amd manipulating sequence files: `dnacat`
+
+Generate a random 20bp sequence and a 5bp sequence, print in fasta format
+
+    ./bin/dnacat -n 20 -n 5 -F
+
+Output:
+
+    >rand0
+    CTGATAAATCTTTTACGTCC
+    >rand1
+    GTAGC
+
+Read three files, print as FASTQ:
+
+    ./bin/dnacat -Q input.sam input.fq input.fa
+
+Get some stats on an input file:
+
+    ./bin/dnacat -s input.sam
+
+Output:
+
+    File: test/reads.fq
+    Format: FASTQ (read with zlib)
+    Format QScores: Sanger (Phred+33), offset: 33, min: 33, max: 73, scores: [0,40]
+    QScore range in first 500bp: [35,65]
+    Total seq (bp):     1,275
+    Number of reads:    25
+    Shortest read (bp): 51
+    Longest read  (bp): 51
+    Mean length   (bp): 51
+
+Interleave two files, print in FASTQ:
+
+    ./bin/dnacat -Q -i reads.1.fq.gz reads.2.fq.gz > reads.interleaved.fq.gz
+
+Read a file, print in FASTA, wrap lines to be no longer than 80bp:
+
+    ./bin/dnacat -F -w 80 input.fq > input.wrapped.fa
+
+Other useful one liners:
+* Reverse complement a sequence: `./bin/dnacat -r - <<< AACGA` Output: `TCGTT`
+* Reverse a sequence: `./bin/dnacat -R - <<< AACGA` Output: `AGCAA`
+* Complement a sequence: `./bin/dnacat -C - <<< AACGA` Output: `TTGCT`
+* Convert to uppercase: `./bin/dnacat -u in.fa`
+* Convert to lowercase: `./bin/dnacat -l in.fa`
+* Convert lowercase + non-ACGT bases to 'N': `./bin/dnacat -m in.fa`
+
+Note: in bash `cmd <<< AACGA` is the same as 'echo AACGA | cmd'
 
 Example Code
 ============

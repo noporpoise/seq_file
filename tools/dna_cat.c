@@ -35,9 +35,9 @@ const char usage[] = "  Read and manipulate dna sequence.\n"
 #endif
 "\n"
 "  -h,--help        show this help text\n"
-"  -f,--fasta       print in FASTA format\n"
-"  -q,--fastq       print in FASTQ format\n"
-"  -p,--plain       print in plain format\n"
+"  -F,--fasta       print in FASTA format\n"
+"  -Q,--fastq       print in FASTQ format\n"
+"  -P,--plain       print in plain format\n"
 "  -w,--wrap <n>    wrap lines by <n> characters [default: 0 (off)]\n"
 "  -u,--uppercase   convert sequence to uppercase\n"
 "  -l,--lowercase   convert sequence to lowercase\n"
@@ -47,16 +47,18 @@ const char usage[] = "  Read and manipulate dna sequence.\n"
 "  -i,--interleave  interleave input files\n"
 "  -m,--mask        mask lowercase bases\n"
 "  -n,--rand <n>    print <n> random bases AFTER reading files\n"
-"  -s,--stat        probe and print file info only\n"
-"  -S,--fast-stat   probe and print file info quickly\n";
+"  -s,--stat        probe and print file info, summarise read lengths\n"
+"  -S,--fast-stat   probe and print file info only\n"
+"\n"
+"  Written by Isaac Turner <turner.isaac@gmail.com>\n";
 
 static struct option longopts[] =
 {
 // General options
   {"help",       no_argument,       NULL, 'h'},
-  {"fasta",      no_argument,       NULL, 'f'},
-  {"fastq",      no_argument,       NULL, 'q'},
-  {"plain",      no_argument,       NULL, 'p'},
+  {"fasta",      no_argument,       NULL, 'F'},
+  {"fastq",      no_argument,       NULL, 'Q'},
+  {"plain",      no_argument,       NULL, 'P'},
   {"wrap",       required_argument, NULL, 'w'},
   {"uppercase",  no_argument,       NULL, 'u'},
   {"lowercase",  no_argument,       NULL, 'l'},
@@ -71,7 +73,7 @@ static struct option longopts[] =
   {NULL, 0, NULL, 0}
 };
 
-const char shortopts[] = "hfqpw:ulrRCimn:sS";
+const char shortopts[] = "hFQPw:ulrRCimn:sS";
 const char *cmdstr;
 
 const char bases[] = "ACGT";
@@ -245,9 +247,12 @@ static uint8_t read_print(seq_file_t *sf, read_t *r,
   else if(ops & OPS_COMPLEMENT) seq_read_complement(r);
 
   if(ops & OPS_MASK_LC) {
-    for(i = 0; i < r->seq.end; i++)
-      if(islower(r->seq.b[i]))
-        r->seq.b[i] = 'N';
+    for(i = 0; i < r->seq.end; i++) {
+      switch(r->seq.b[i]) {
+        case 'A': case 'C': case 'G': case 'T': break;
+        default: r->seq.b[i] = 'N';
+      }
+    }
   }
 
   if(fmt == 0) {
@@ -324,9 +329,9 @@ int main(int argc, char **argv)
     switch(c) {
       case 0: /* flag set */ break;
       case 'h': print_usage(NULL); break;
-      case 'f': fmt |= SEQ_FMT_FASTA; break;
-      case 'q': fmt |= SEQ_FMT_FASTQ; break;
-      case 'p': fmt |= SEQ_FMT_PLAIN; break;
+      case 'F': fmt |= SEQ_FMT_FASTA; break;
+      case 'Q': fmt |= SEQ_FMT_FASTQ; break;
+      case 'P': fmt |= SEQ_FMT_PLAIN; break;
       case 'w':
         if(!parse_entire_size(optarg, &linewrap))
           print_usage("Bad -w argument: %s\n", optarg);
@@ -362,7 +367,7 @@ int main(int argc, char **argv)
     print_usage("Please specify at least one input file\n");
 
   // Default to plain format for random output
-  if(!num_inputs && !fmt) fmt = SEQ_FMT_PLAIN;
+  if(nrand_len && !num_inputs && !fmt) fmt = SEQ_FMT_PLAIN;
 
   if(linewrap && (fmt & SEQ_FMT_PLAIN))
     print_usage("Bad idea to use linewrap with plain output (specify -f or -q)");
@@ -377,6 +382,7 @@ int main(int argc, char **argv)
 
   read_t r;
   seq_read_alloc(&r);
+  int s;
 
   seq_file_t *inputs[num_inputs];
 
@@ -395,8 +401,9 @@ int main(int argc, char **argv)
     while(waiting_files) {
       for(i = 0; i < num_inputs; i++) {
         if(inputs[i] != NULL) {
-          if(seq_read(inputs[i],&r) > 0)
-            fmt = read_print(inputs[i], &r, fmt, ops, linewrap);
+          s = seq_read(inputs[i],&r);
+          if(s < 0) fprintf(stderr, "Error reading from: %s\n", inputs[i]->path);
+          if(s > 0) fmt = read_print(inputs[i], &r, fmt, ops, linewrap);
           else { seq_close(inputs[i]); inputs[i] = NULL; waiting_files--; }
         }
       }
@@ -404,8 +411,9 @@ int main(int argc, char **argv)
   }
   else {
     for(i = 0; i < num_inputs; i++) {
-      while(seq_read(inputs[i],&r) > 0)
+      while((s = seq_read(inputs[i],&r)) > 0)
         fmt = read_print(inputs[i], &r, fmt, ops, linewrap);
+      if(s < 0) fprintf(stderr, "Error reading from: %s\n", inputs[i]->path);
       seq_close(inputs[i]);
     }
   }
