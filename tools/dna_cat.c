@@ -160,8 +160,14 @@ static void seed_random()
 }
 
 // @fast if true skip reading over all reads
-static void file_stat(seq_file_t *sf, read_t *r, bool fast)
+static void file_stat(seq_file_t *sf, read_t *r, uint8_t ops, bool fast)
 {
+  if(ops && fast)
+    print_usage("-S,--fast-stat is not compatible with -l,-u,-r,-R,-C,-m");
+
+  if(ops & ~(OPS_UPPERCASE | OPS_LOWERCASE))
+    print_usage("-s,--stat and -S,--fast-stat are not compatible with -r,-R,-C,-m");
+
   printf("File: %s\n", sf->path);
 
   int minq = -1, maxq = -1, s, fmt;
@@ -170,7 +176,7 @@ static void file_stat(seq_file_t *sf, read_t *r, bool fast)
   s = seq_read(sf,r);
 
   if(s < 0) {
-    fprintf(stderr, "Error occurred reading file\n");
+    fprintf(stderr, "Error reading file: %s\n", sf->path);
     exit(EXIT_FAILURE);
   }
 
@@ -203,14 +209,25 @@ static void file_stat(seq_file_t *sf, read_t *r, bool fast)
   if(!fast)
   {
     // We've already read one read
+    size_t i, char_count[256] = {0};
     size_t total_len = r->seq.end, nreads = 1;
     size_t min_rlen = total_len, max_rlen = r->seq.end;
+
+    if(ops & OPS_UPPERCASE)       seq_read_to_uppercase(r);
+    else if(ops & OPS_LOWERCASE)  seq_read_to_lowercase(r);
+    for(i = 0; i < r->seq.end; i++)
+      char_count[(uint8_t)r->seq.b[i]]++;
 
     while((s = seq_read(sf,r)) > 0) {
       total_len += r->seq.end;
       max_rlen = r->seq.end > max_rlen ? r->seq.end : max_rlen;
       min_rlen = r->seq.end < min_rlen ? r->seq.end : min_rlen;
       nreads++;
+
+      if(ops & OPS_UPPERCASE)       seq_read_to_uppercase(r);
+      else if(ops & OPS_LOWERCASE)  seq_read_to_lowercase(r);
+      for(i = 0; i < r->seq.end; i++)
+        char_count[(uint8_t)r->seq.b[i]]++;
     }
 
     size_t mean_rlen = (size_t)(((double)total_len / nreads) + 0.5);
@@ -228,9 +245,20 @@ static void file_stat(seq_file_t *sf, read_t *r, bool fast)
     printf("  Shortest read (bp): %s\n", minrlenstr);
     printf("  Longest read  (bp): %s\n", maxrlenstr);
     printf("  Mean length   (bp): %s\n", meanrlenstr);
-  }
 
-  if(s < 0) { printf("Error reading file: %s\n", sf->path); exit(EXIT_FAILURE); }
+    printf("  Char Counts:\n");
+    for(i = 0; i < 256; i++) {
+      if(char_count[i]) {
+        if(isprint((char)i)) printf("      %c: %zu\n", (char)i, char_count[i]);
+        else                 printf(" (%3zu): %zu\n",        i, char_count[i]);
+      }
+    }
+
+    if(s < 0) {
+      fprintf(stderr, "Error reading file: %s\n", sf->path);
+      exit(EXIT_FAILURE);
+    }
+  }
 
   fputc('\n', stdout);
 }
@@ -240,8 +268,8 @@ static uint8_t read_print(seq_file_t *sf, read_t *r,
                           uint8_t fmt, uint8_t ops, size_t linewrap)
 {
   size_t i;
-  if(ops & OPS_UPPERCASE)  seq_read_to_uppercase(r);
-  if(ops & OPS_LOWERCASE)  seq_read_to_lowercase(r);
+  if(ops & OPS_UPPERCASE)       seq_read_to_uppercase(r);
+  else if(ops & OPS_LOWERCASE)  seq_read_to_lowercase(r);
   if((ops & OPS_REVERSE) && (ops & OPS_COMPLEMENT)) seq_read_reverse_complement(r);
   else if(ops & OPS_REVERSE)    seq_read_reverse(r);
   else if(ops & OPS_COMPLEMENT) seq_read_complement(r);
@@ -372,7 +400,10 @@ int main(int argc, char **argv)
   if(linewrap && (fmt & SEQ_FMT_PLAIN))
     print_usage("Bad idea to use linewrap with plain output (specify -f or -q)");
 
-  if(stat && (interleave || ops || linewrap || fmt || nrand_len))
+  if((ops & OPS_UPPERCASE) && (ops & OPS_LOWERCASE))
+    print_usage("Cannot use both -u,--uppercase and -l,--lowercase");
+
+  if(stat && (interleave || linewrap || fmt || nrand_len))
     print_usage("-s,--stat is not compatible with other options");
 
   if(stat && fast_stat)
@@ -393,7 +424,7 @@ int main(int argc, char **argv)
 
   if(stat || fast_stat) {
     for(i = 0; i < num_inputs; i++)
-      file_stat(inputs[i], &r, fast_stat);
+      file_stat(inputs[i], &r, ops, fast_stat);
   }
   else if(interleave) {
     // read one entry from each file
