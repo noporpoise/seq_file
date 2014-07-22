@@ -15,7 +15,7 @@ Jan 2014, Public Domain
 #include <getopt.h>
 #include <inttypes.h>
 #include <limits.h> // INT_MAX
-#include <ctype.h> // toupper tolower
+#include <ctype.h> // toupper() tolower() isprint()
 
 #include <time.h>
 #include <sys/time.h> // for seeding random
