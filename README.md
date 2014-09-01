@@ -256,14 +256,15 @@ quality scores.  Returns 0 if no qual scores in the first `num` bases,
 Writing
 -------
 
-    seq_print_fasta(const read_t *r, FILE *fh, int linewrap)
-    seq_print_fastq(const read_t *r, FILE *fh, int linewrap)
-    seq_gzprint_fasta(const read_t *r, gzFile gz, int linewrap)
-    seq_gzprint_fastq(const read_t *r, gzFile gz, int linewrap)
+    int seq_print_fasta(const read_t *r, FILE *fh, int linewrap)
+    int seq_print_fastq(const read_t *r, FILE *fh, int linewrap)
+    int seq_gzprint_fasta(const read_t *r, gzFile gz, int linewrap)
+    int seq_gzprint_fastq(const read_t *r, gzFile gz, int linewrap)
 
 Write a read in FASTA or FASTQ format.  If using FASTQ and the quality score
 and sequence have different lengths, the quality score is shortened or padded
-with '.' to make it the same length as the sequence. 
+with '.' to make it the same length as the sequence. Return -1 on error, 0 on
+success.
 
 Useful functions
 ----------------

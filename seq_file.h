@@ -780,22 +780,24 @@ static inline void seq_read_to_lowercase(read_t *r)
   } \
 } while(0)
 
+// These functions return -1 on error or 0 otherwise
 #define _seq_print_fasta(fname,ftype,_puts,_putc)                              \
-  static inline void fname(const read_t *r, ftype fh, size_t linewrap) {       \
+  static inline int fname(const read_t *r, ftype fh, size_t linewrap) {        \
     size_t j = 0;                                                              \
     _putc(fh, '>');                                                            \
     _puts(fh, r->name.b);                                                      \
     _putc(fh, '\n');                                                           \
     if(linewrap == 0) _puts(fh, r->seq.b);                                     \
     else _seq_print_wrap(fh, r->seq.b, r->seq.end, linewrap, j, _putc);        \
-    _putc(fh, '\n');                                                           \
+    return _putc(fh, '\n') == '\n' ? 0 : -1;                                   \
   }                                                                            \
 
 _seq_print_fasta(seq_print_fasta,FILE*,fputs2,fputc2)
 _seq_print_fasta(seq_gzprint_fasta,gzFile,gzputs2,gzputc2)
 
+// These functions return -1 on error or 0 otherwise
 #define _seq_print_fastq(fname,ftype,_puts,_putc)                              \
-  static inline void fname(const read_t *r, ftype fh, size_t linewrap) {       \
+  static inline int fname(const read_t *r, ftype fh, size_t linewrap) {        \
     _putc(fh, '@');                                                            \
     _puts(fh, r->name.b);                                                      \
     _putc(fh, '\n');                                                           \
@@ -805,7 +807,6 @@ _seq_print_fasta(seq_gzprint_fasta,gzFile,gzputs2,gzputc2)
       _puts(fh, "\n+\n");                                                      \
       for(i = 0;      i < qlimit;      i++) { _putc(fh, r->qual.b[i]); }       \
       for(i = qlimit; i < r->seq.end;  i++) { _putc(fh, '.'); }                \
-      _putc(fh, '\n');                                                         \
     }                                                                          \
     else {                                                                     \
       _seq_print_wrap(fh, r->seq.b, r->seq.end, linewrap, j, _putc);           \
@@ -817,8 +818,8 @@ _seq_print_fasta(seq_gzprint_fasta,gzFile,gzputs2,gzputc2)
         if(j == linewrap) { _putc(fh, '\n'); j = 0; }                          \
         _putc(fh, '.');                                                        \
       }                                                                        \
-      _putc(fh, '\n');                                                         \
     }                                                                          \
+    return _putc(fh, '\n') == '\n' ? 0 : -1;                                   \
   }
 
 _seq_print_fastq(seq_print_fastq,FILE*,fputs2,fputc2)
