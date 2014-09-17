@@ -28,6 +28,7 @@ Jan 2014, Public Domain
 #define OPS_REVERSE     4
 #define OPS_COMPLEMENT  8
 #define OPS_MASK_LC    16 /* Mask lower case bases */
+#define OPS_NAME_ONLY  32 /* Only print read name */
 
 const char usage[] = "  Read and manipulate dna sequence.\n"
 #ifdef _USESAM
@@ -47,6 +48,7 @@ const char usage[] = "  Read and manipulate dna sequence.\n"
 "  -i,--interleave  interleave input files\n"
 "  -m,--mask        mask lowercase bases\n"
 "  -n,--rand <n>    print <n> random bases AFTER reading files\n"
+"  -N,--names       print read names only\n"
 "  -s,--stat        probe and print file info, summarise read lengths\n"
 "  -S,--fast-stat   probe and print file info only\n"
 "\n"
@@ -68,12 +70,13 @@ static struct option longopts[] =
   {"interleave", no_argument,       NULL, 'i'},
   {"mask",       no_argument,       NULL, 'm'},
   {"rand",       required_argument, NULL, 'n'},
+  {"names",      no_argument,       NULL, 'N'},
   {"stat",       required_argument, NULL, 's'},
   {"fast-stat",  required_argument, NULL, 'S'},
   {NULL, 0, NULL, 0}
 };
 
-const char shortopts[] = "hFQPw:ulrRCimn:sS";
+const char shortopts[] = "hFQPw:ulrRCimn:NsS";
 const char *cmdstr;
 
 const char bases[] = "ACGT";
@@ -284,16 +287,28 @@ static uint8_t read_print(seq_file_t *sf, read_t *r,
   }
 
   if(fmt == 0) {
-    if(seq_is_plain(sf)) fmt = SEQ_FMT_PLAIN;
+    // default to plain format is printint names only with no fmt specified
+    if(ops & OPS_NAME_ONLY) fmt = SEQ_FMT_PLAIN;
+    else if(seq_is_plain(sf)) fmt = SEQ_FMT_PLAIN;
     else if(seq_is_fasta(sf)) fmt = SEQ_FMT_FASTA;
     else fmt = SEQ_FMT_FASTQ;
   }
 
-  switch(fmt) {
-    case SEQ_FMT_FASTA: seq_print_fasta(r, stdout, linewrap); break;
-    case SEQ_FMT_FASTQ: seq_print_fastq(r, stdout, linewrap); break;
-    case SEQ_FMT_PLAIN: fputs(r->seq.b, stdout); fputc('\n', stdout); break;
-    default: fprintf(stderr, "Got value: %i\n", (int)fmt); abort();
+  if(ops & OPS_NAME_ONLY) {
+    switch(fmt) {
+      case SEQ_FMT_FASTA: printf(">%s\n", r->name.b); break;
+      case SEQ_FMT_FASTQ: printf("@%s\n", r->name.b); break;
+      case SEQ_FMT_PLAIN: printf("%s\n", r->name.b); break;
+      default: fprintf(stderr, "Got value: %i\n", (int)fmt); abort();
+    }
+  }
+  else {
+    switch(fmt) {
+      case SEQ_FMT_FASTA: seq_print_fasta(r, stdout, linewrap); break;
+      case SEQ_FMT_FASTQ: seq_print_fastq(r, stdout, linewrap); break;
+      case SEQ_FMT_PLAIN: fputs(r->seq.b, stdout); fputc('\n', stdout); break;
+      default: fprintf(stderr, "Got value: %i\n", (int)fmt); abort();
+    }
   }
 
   return fmt;
@@ -364,12 +379,13 @@ int main(int argc, char **argv)
         if(!parse_entire_size(optarg, &linewrap))
           print_usage("Bad -w argument: %s\n", optarg);
         break;
-      case 'u': ops |= OPS_UPPERCASE; break;
-      case 'l': ops |= OPS_LOWERCASE; break;
+      case 'u': ops |= OPS_UPPERCASE;  break;
+      case 'l': ops |= OPS_LOWERCASE;  break;
       case 'r': ops |= OPS_REVERSE | OPS_COMPLEMENT; break;
-      case 'R': ops |= OPS_REVERSE; break;
+      case 'R': ops |= OPS_REVERSE;    break;
       case 'C': ops |= OPS_COMPLEMENT; break;
-      case 'm': ops |= OPS_MASK_LC; break;
+      case 'm': ops |= OPS_MASK_LC;    break;
+      case 'N': ops |= OPS_NAME_ONLY;  break;
       case 'n':
         if(!parse_entire_size(optarg, &tmprnd))
           print_usage("Bad -n argument: %s\n", optarg);
@@ -403,7 +419,10 @@ int main(int argc, char **argv)
   if((ops & OPS_UPPERCASE) && (ops & OPS_LOWERCASE))
     print_usage("Cannot use both -u,--uppercase and -l,--lowercase");
 
-  if(stat && (interleave || linewrap || fmt || nrand_len))
+  if((ops & OPS_NAME_ONLY) && ((ops &~OPS_NAME_ONLY) || nrand_len))
+    print_usage("Cannot use --names with other options");
+
+  if(stat && (interleave || linewrap || fmt || nrand_len || ops))
     print_usage("-s,--stat is not compatible with other options");
 
   if(stat && fast_stat)
