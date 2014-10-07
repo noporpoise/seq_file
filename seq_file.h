@@ -100,6 +100,7 @@ static const int FASTQ_OFFSET[6] = { 33, 33, 64, 64, 64, 33};
 //
 
 static inline void seq_read_reset(read_t *r) {
+  r->name.begin = r->seq.begin = r->qual.begin = 0;
   r->name.end = r->seq.end = r->qual.end = 0;
   r->name.b[0] = r->seq.b[0] = r->qual.b[0] = '\0';
   r->from_sam = 0;
@@ -138,8 +139,8 @@ static inline read_t* seq_read_alloc(read_t *r)
       return NULL;
     }
   #endif
+
   // buffer_alloc sets begin, end to 1, reset to 0
-  r->name.begin = r->seq.begin = r->qual.begin = 0;
   seq_read_reset(r);
 
   return r;
@@ -170,6 +171,7 @@ static const int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 9, 14,
 // Read a sam/bam file
 static inline int _seq_read_sam(seq_file_t *sf, read_t *r)
 {
+  r->name.begin = r->seq.begin = r->qual.begin = 0;
   r->name.end = r->seq.end = r->qual.end = 0;
   r->name.b[0] = r->seq.b[0] = r->qual.b[0] = '\0';
 
@@ -216,8 +218,8 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *r)
 #define _func_read_fastq(_read_fastq,__getc,__ungetc,__readline)               \
   static inline int _read_fastq(seq_file_t *sf, read_t *r)                     \
   {                                                                            \
-    int c = __getc(sf);                                                        \
     seq_read_reset(r);                                                         \
+    int c = __getc(sf);                                                        \
                                                                                \
     if(c == -1) return 0;                                                      \
     if(c != '@' || __readline(sf, r->name) == 0) return -1;                    \
@@ -245,8 +247,8 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *r)
 #define _func_read_fasta(_read_fasta,__getc,__ungetc,__readline)               \
   static inline int _read_fasta(seq_file_t *sf, read_t *r)                     \
   {                                                                            \
-    int c = __getc(sf);                                                        \
     seq_read_reset(r);                                                         \
+    int c = __getc(sf);                                                        \
                                                                                \
     if(c == -1) return 0;                                                      \
     if(c != '>' || __readline(sf, r->name) == 0) return -1;                    \
@@ -350,28 +352,28 @@ static inline void _seq_buffer_reads(seq_file_t *sf, size_t nbases)
 // perform reading on seq_file_t
 
 // getc on seq_file_t
-#define _sf_gzgetc(sf)              gzgetc(sf->gz_file)
-#define _sf_gzgetc_buf(sf)          gzgetc_buf(sf->gz_file,&sf->in)
-#define _sf_fgetc(sf)               fgetc(sf->f_file)
-#define _sf_fgetc_buf(sf)           fgetc_buf(sf->f_file,&sf->in)
+#define _sf_gzgetc(sf)              gzgetc((sf)->gz_file)
+#define _sf_gzgetc_buf(sf)          gzgetc_buf((sf)->gz_file,&(sf)->in)
+#define _sf_fgetc(sf)               fgetc((sf)->f_file)
+#define _sf_fgetc_buf(sf)           fgetc_buf((sf)->f_file,&(sf)->in)
 
 // ungetc on seq_file_t
-#define _sf_gzungetc(sf,c)          gzungetc(c,sf->gz_file)
-#define _sf_gzungetc_buf(sf,c)      ungetc_buf(c,&sf->in)
-#define _sf_fungetc(sf,c)           fungetc(c,sf->f_file)
-#define _sf_fungetc_buf(sf,c)       ungetc_buf(c,&sf->in)
+#define _sf_gzungetc(sf,c)          gzungetc(c,(sf)->gz_file)
+#define _sf_gzungetc_buf(sf,c)      ungetc_buf(c,&(sf)->in)
+#define _sf_fungetc(sf,c)           fungetc(c,(sf)->f_file)
+#define _sf_fungetc_buf(sf,c)       ungetc_buf(c,&(sf)->in)
 
 // readline on seq_file_t using buffer into read
-#define _sf_gzreadline(sf,buf)      gzreadline(sf->gz_file,&buf.b,&buf.end,&buf.size)
-#define _sf_gzreadline_buf(sf,buf)  gzreadline_buf(sf->gz_file,&sf->in,&buf.b,&buf.end,&buf.size)
-#define _sf_freadline(sf,buf)       freadline(sf->f_file,&buf.b,&buf.end,&buf.size)
-#define _sf_freadline_buf(sf,buf)   freadline_buf(sf->f_file,&sf->in,&buf.b,&buf.end,&buf.size)
+#define _sf_gzreadline(sf,buf)      gzreadline((sf)->gz_file,&(buf).b,&(buf).end,&(buf).size)
+#define _sf_gzreadline_buf(sf,buf)  gzreadline_buf((sf)->gz_file,&(sf)->in,&(buf).b,&(buf).end,&(buf).size)
+#define _sf_freadline(sf,buf)       freadline((sf)->f_file,&(buf).b,&(buf).end,&(buf).size)
+#define _sf_freadline_buf(sf,buf)   freadline_buf((sf)->f_file,&(sf)->in,&(buf).b,&(buf).end,&(buf).size)
 
 // skipline on seq_file_t
-#define _sf_gzskipline(sf)          gzskipline(sf->gz_file)
-#define _sf_gzskipline_buf(sf)      gzskipline_buf(sf->gz_file,&sf->in)
-#define _sf_fskipline(sf)           fskipline(sf->f_file)
-#define _sf_fskipline_buf(sf)       fskipline_buf(sf->f_file,&sf->in)
+#define _sf_gzskipline(sf)          gzskipline((sf)->gz_file)
+#define _sf_gzskipline_buf(sf)      gzskipline_buf((sf)->gz_file,&(sf)->in)
+#define _sf_fskipline(sf)           fskipline((sf)->f_file)
+#define _sf_fskipline_buf(sf)       fskipline_buf((sf)->f_file,&(sf)->in)
 
 // Read FASTQ
 _func_read_fastq(_seq_read_fastq_f,      _sf_fgetc,      _sf_fungetc,      _sf_freadline)
@@ -569,8 +571,8 @@ static inline void seq_close(seq_file_t *sf)
   if(sf->s_file != NULL) { sam_close(sf->s_file); sf->s_file = NULL; }
   if(sf->bam_header != NULL) { free(sf->bam_header); sf->bam_header = NULL; }
   #endif
-  if(sf->in.b != NULL) { buffer_dealloc(&sf->in); }
-  if(sf->path != NULL) { free(sf->path); sf->path = NULL; }
+  buffer_dealloc(&sf->in);
+  free(sf->path); sf->path = NULL;
   read_t *r = sf->rhead, *tmpr;
   while(r != NULL) { tmpr = r->next; seq_read_free(r); r = tmpr; }
   free(sf);
@@ -582,19 +584,18 @@ static inline int seq_get_qual_limits(seq_file_t *sf, int *minq, int *maxq)
 {
   read_t *r;
   int min = INT_MAX, max = 0;
-  size_t i, count = 0, qcount = 0, limit = 1000, len;
-  char q;
+  size_t count = 0, qcount = 0, limit = 1000, len;
+  const char *str, *end;
 
   _seq_buffer_reads(sf, limit);
   r = sf->rhead;
 
   while(count < limit && r != NULL)
   {
-    len = (r->qual.end < limit - qcount ? r->qual.end : limit - qcount);
-    for(i = 0; i < len; i++) {
-      q = r->qual.b[i];
-      if(q > max) max = q;
-      if(q < min) min = q;
+    len = _SF_MIN(r->qual.end, limit - qcount);
+    for(str = r->qual.b, end = str + len; str < end; str++) {
+      if(*str > max) max = *str;
+      if(*str < min) min = *str;
     }
     count += r->seq.end;
     qcount += r->qual.end;

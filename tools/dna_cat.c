@@ -14,7 +14,6 @@ Jan 2014, Public Domain
 #include <stdbool.h>
 #include <getopt.h>
 #include <inttypes.h>
-#include <limits.h> // INT_MAX
 #include <ctype.h> // toupper() tolower() isprint()
 
 #include <time.h>
@@ -51,6 +50,7 @@ const char usage[] = "  Read and manipulate dna sequence.\n"
 "  -N,--names       print read names only\n"
 "  -s,--stat        probe and print file info, summarise read lengths\n"
 "  -S,--fast-stat   probe and print file info only\n"
+"  -M,--rename <f>  read names from <f>, one per line\n"
 "\n"
 "  Written by Isaac Turner <turner.isaac@gmail.com>\n";
 
@@ -73,13 +73,32 @@ static struct option longopts[] =
   {"names",      no_argument,       NULL, 'N'},
   {"stat",       required_argument, NULL, 's'},
   {"fast-stat",  required_argument, NULL, 'S'},
+  {"rename",     required_argument, NULL, 'M'},
   {NULL, 0, NULL, 0}
 };
 
-const char shortopts[] = "hFQPw:ulrRCimn:NsS";
+const char shortopts[] = "hFQPw:ulrRCimn:NsSM:";
 const char *cmdstr;
 
 const char bases[] = "ACGT";
+
+#define die(fmt, ...) dief(__FILE__, __func__, __LINE__, fmt, __VA_ARGS__)
+
+void dief(const char *file, const char *func, int line, const char *fmt, ...)
+__attribute__((format(printf, 4, 5)))
+__attribute__((noreturn));
+
+void dief(const char *file, const char *func, int line, const char *fmt, ...)
+{
+  va_list argptr;
+  fflush(stdout);
+  fprintf(stderr, "[%s:%i] Error %s(): ", file, line, func);
+  va_start(argptr, fmt);
+  vfprintf(stderr, fmt, argptr);
+  va_end(argptr);
+  if(*(fmt + strlen(fmt) - 1) != '\n') fputc('\n', stderr);
+  exit(EXIT_FAILURE);
+}
 
 char parse_entire_size(const char *str, size_t *result)
 {
@@ -173,20 +192,13 @@ static void file_stat(seq_file_t *sf, read_t *r, uint8_t ops, bool fast)
 
   printf("File: %s\n", sf->path);
 
-  int minq = -1, maxq = -1, s, fmt;
+  int minq = -1, maxq = -1, s, fmti;
 
-  fmt = seq_guess_fastq_format(sf, &minq, &maxq);
+  fmti = seq_guess_fastq_format(sf, &minq, &maxq);
   s = seq_read(sf,r);
 
-  if(s < 0) {
-    fprintf(stderr, "Error reading file: %s\n", sf->path);
-    exit(EXIT_FAILURE);
-  }
-
-  if(s == 0) {
-    fprintf(stderr, "  Cannot get any reads from file\n");
-    return;
-  }
+  if(s < 0) die("Error reading file: %s\n", sf->path);
+  if(s == 0) die("Cannot get any reads from file: %s\n", sf->path);
 
   const char zstr[] = " (read with zlib)";
 
@@ -200,11 +212,11 @@ static void file_stat(seq_file_t *sf, read_t *r, uint8_t ops, bool fast)
 
   if(print_qstat)
   {
-    if(fmt == -1) printf("  Couldn't get any quality scores\n");
+    if(fmti == -1) printf("  Couldn't get any quality scores\n");
     else {
       printf("  Format QScores: %s, offset: %i, min: %i, max: %i, scores: [%i,%i]\n",
-             FASTQ_FORMATS[fmt], FASTQ_OFFSET[fmt], FASTQ_MIN[fmt], FASTQ_MAX[fmt],
-             FASTQ_MIN[fmt]-FASTQ_OFFSET[fmt], FASTQ_MAX[fmt]-FASTQ_OFFSET[fmt]);
+             FASTQ_FORMATS[fmti], FASTQ_OFFSET[fmti], FASTQ_MIN[fmti], FASTQ_MAX[fmti],
+             FASTQ_MIN[fmti]-FASTQ_OFFSET[fmti], FASTQ_MAX[fmti]-FASTQ_OFFSET[fmti]);
       printf("  QScore range in first 500bp: [%i,%i]\n", minq, maxq);
     }
   }
@@ -257,18 +269,37 @@ static void file_stat(seq_file_t *sf, read_t *r, uint8_t ops, bool fast)
       }
     }
 
-    if(s < 0) {
-      fprintf(stderr, "Error reading file: %s\n", sf->path);
-      exit(EXIT_FAILURE);
-    }
+    if(s < 0) die("Error reading file: %s\n", sf->path);
   }
 
   fputc('\n', stdout);
 }
 
+static inline bool _print_rename_hdr(FILE *rename_fh, CharBuffer *rnbuf,
+                                     seq_format fmt)
+{
+  if((fmt == SEQ_FMT_FASTA || fmt == SEQ_FMT_FASTQ) && rename_fh)
+  {
+    buffer_reset(rnbuf);
+    if(!freadline(rename_fh, &rnbuf->b, &rnbuf->end, &rnbuf->size)) return false;
+    buffer_chomp(rnbuf);
+
+    // Strip off @ or > char at beginning
+    if(rnbuf->begin < rnbuf->end &&
+       (rnbuf->b[rnbuf->begin] == '>' || rnbuf->b[rnbuf->begin] == '@')) {
+      rnbuf->begin++;
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
 // Returns format used
-static uint8_t read_print(seq_file_t *sf, read_t *r,
-                          uint8_t fmt, uint8_t ops, size_t linewrap)
+static seq_format read_print(seq_file_t *sf, read_t *r,
+                             seq_format fmt, uint8_t ops, size_t linewrap,
+                             FILE *rename_fh, CharBuffer *rnbuf)
 {
   size_t i;
   if(ops & OPS_UPPERCASE)       seq_read_to_uppercase(r);
@@ -286,7 +317,7 @@ static uint8_t read_print(seq_file_t *sf, read_t *r,
     }
   }
 
-  if(fmt == 0) {
+  if(fmt == SEQ_FMT_UNKNOWN) {
     // default to plain format is printint names only with no fmt specified
     if(ops & OPS_NAME_ONLY) fmt = SEQ_FMT_PLAIN;
     else if(seq_is_plain(sf)) fmt = SEQ_FMT_PLAIN;
@@ -294,12 +325,22 @@ static uint8_t read_print(seq_file_t *sf, read_t *r,
     else fmt = SEQ_FMT_FASTQ;
   }
 
+  /* Overwrite read name with rename buffer */
+  if(_print_rename_hdr(rename_fh, rnbuf, fmt)) {
+    // CharBuffer tmp = r->name; r->name = *rnbuf; *rnbuf = tmp;
+    size_t len = buffer_len(rnbuf);
+    buffer_ensure_capacity(&r->name, len);
+    memcpy(r->name.b, rnbuf->b+rnbuf->begin, len);
+    r->name.begin = 0;
+    r->name.b[r->name.end = len] = '\0';
+  }
+
   if(ops & OPS_NAME_ONLY) {
     switch(fmt) {
       case SEQ_FMT_FASTA: printf(">%s\n", r->name.b); break;
       case SEQ_FMT_FASTQ: printf("@%s\n", r->name.b); break;
       case SEQ_FMT_PLAIN: printf("%s\n", r->name.b); break;
-      default: fprintf(stderr, "Got value: %i\n", (int)fmt); abort();
+      default: die("Got value: %i\n", (int)fmt);
     }
   }
   else {
@@ -307,7 +348,7 @@ static uint8_t read_print(seq_file_t *sf, read_t *r,
       case SEQ_FMT_FASTA: seq_print_fasta(r, stdout, linewrap); break;
       case SEQ_FMT_FASTQ: seq_print_fastq(r, stdout, linewrap); break;
       case SEQ_FMT_PLAIN: fputs(r->seq.b, stdout); fputc('\n', stdout); break;
-      default: fprintf(stderr, "Got value: %i\n", (int)fmt); abort();
+      default: die("Got value: %i\n", (int)fmt);
     }
   }
 
@@ -315,14 +356,17 @@ static uint8_t read_print(seq_file_t *sf, read_t *r,
 }
 
 static inline void _print_rnd_entries(const size_t *lens, size_t nentries,
-                                      uint8_t fmt, size_t linewrap)
+                                      uint8_t fmt, size_t linewrap,
+                                      FILE *rename_fh, CharBuffer *rnbuf)
 {
   size_t i, j, k, rnd = 0;
 
   for(i = 0; i < nentries; i++)
   {
-    if(fmt&SEQ_FMT_FASTA) printf(">rand%zu\n", i);
-    else if(fmt&SEQ_FMT_FASTQ) printf("@rand%zu\n", i);
+    if(_print_rename_hdr(rename_fh, rnbuf, fmt))
+      printf("%c%s\n", fmt == SEQ_FMT_FASTQ ? '@' : '>', rnbuf->b+rnbuf->begin);
+    else if(fmt == SEQ_FMT_FASTA) printf(">rand%zu\n", i);
+    else if(fmt == SEQ_FMT_FASTQ) printf("@rand%zu\n", i);
 
     for(j = k = 0; j < lens[i]; j++, k++) {
       if(linewrap && k == linewrap) { k = 0; fputc('\n', stdout); }
@@ -331,7 +375,7 @@ static inline void _print_rnd_entries(const size_t *lens, size_t nentries,
       fputc(bases[rnd&3], stdout);
       rnd >>= 2;
     }
-    if(fmt&SEQ_FMT_FASTQ) { /* quality scores */
+    if(fmt == SEQ_FMT_FASTQ) { /* quality scores */
       fputs("\n+\n", stdout);
       for(j = k = 0; j < lens[i]; j++, k++) {
         if(linewrap && k == linewrap) { k = 0; fputc('\n', stdout); }
@@ -357,8 +401,10 @@ int main(int argc, char **argv)
   cmdstr = argv[0];
 
   bool interleave = false, stat = false, fast_stat = false;
-  uint8_t ops = 0, fmt = SEQ_FMT_UNKNOWN;
+  uint8_t ops = 0, fmt_set = 0;
+  seq_format fmt = SEQ_FMT_UNKNOWN;
   size_t i, linewrap = 0;
+  char *rename_path = NULL;
 
   size_t *nrand = NULL, nrand_len = 0, nrand_cap = 0, tmprnd = 0;
 
@@ -372,9 +418,9 @@ int main(int argc, char **argv)
     switch(c) {
       case 0: /* flag set */ break;
       case 'h': print_usage(NULL); break;
-      case 'F': fmt |= SEQ_FMT_FASTA; break;
-      case 'Q': fmt |= SEQ_FMT_FASTQ; break;
-      case 'P': fmt |= SEQ_FMT_PLAIN; break;
+      case 'F': fmt_set++; fmt = SEQ_FMT_FASTA; break;
+      case 'Q': fmt_set++; fmt = SEQ_FMT_FASTQ; break;
+      case 'P': fmt_set++; fmt = SEQ_FMT_PLAIN; break;
       case 'w':
         if(!parse_entire_size(optarg, &linewrap))
           print_usage("Bad -w argument: %s\n", optarg);
@@ -391,9 +437,10 @@ int main(int argc, char **argv)
           print_usage("Bad -n argument: %s\n", optarg);
         vector_push(&nrand, &nrand_len, &nrand_cap, tmprnd);
         break;
-      case 'i': interleave = true; break;
-      case 's': stat = true; break;
-      case 'S': fast_stat = true; break;
+      case 'i': interleave  = true;   break;
+      case 's': stat        = true;   break;
+      case 'S': fast_stat   = true;   break;
+      case 'M': rename_path = optarg; break;
       case ':': /* BADARG */
       case '?': /* BADCH getopt_long has already printed error */
         print_usage("Bad option: %s\n", argv[optind-1]);
@@ -401,7 +448,7 @@ int main(int argc, char **argv)
     }
   }
 
-  if(!!(fmt&SEQ_FMT_FASTA) + !!(fmt&SEQ_FMT_FASTQ) + !!(fmt&SEQ_FMT_PLAIN) > 1)
+  if(fmt_set > 1)
     print_usage("Please specify only one output format (-f,-q,-p)\n");
 
   size_t num_inputs = argc - optind;
@@ -411,9 +458,9 @@ int main(int argc, char **argv)
     print_usage("Please specify at least one input file\n");
 
   // Default to plain format for random output
-  if(nrand_len && !num_inputs && !fmt) fmt = SEQ_FMT_PLAIN;
+  if(nrand_len && !num_inputs && fmt == SEQ_FMT_UNKNOWN) fmt = SEQ_FMT_PLAIN;
 
-  if(linewrap && (fmt & SEQ_FMT_PLAIN))
+  if(linewrap && (fmt == SEQ_FMT_PLAIN))
     print_usage("Bad idea to use linewrap with plain output (specify -f or -q)");
 
   if((ops & OPS_UPPERCASE) && (ops & OPS_LOWERCASE))
@@ -427,6 +474,16 @@ int main(int argc, char **argv)
 
   if(stat && fast_stat)
     print_usage("Cannot use -s,--stat and -S--fast-stat together");
+
+  FILE *rename_fh = NULL;
+  CharBuffer rename_buf;
+
+  if(rename_path) {
+    if(strcmp(rename_path,"-") == 0) rename_fh = stdin;
+    else if((rename_fh = fopen(rename_path, "r")) == NULL)
+      die("Cannot open --rename file: %s", rename_path);
+    if(!buffer_alloc(&rename_buf, 1024)) die("Out of memory%c", '!');
+  }
 
   if(nrand_len) seed_random();
 
@@ -452,18 +509,24 @@ int main(int argc, char **argv)
       for(i = 0; i < num_inputs; i++) {
         if(inputs[i] != NULL) {
           s = seq_read(inputs[i],&r);
-          if(s < 0) fprintf(stderr, "Error reading from: %s\n", inputs[i]->path);
-          if(s > 0) fmt = read_print(inputs[i], &r, fmt, ops, linewrap);
-          else { seq_close(inputs[i]); inputs[i] = NULL; waiting_files--; }
+          if(s < 0) die("Error reading from: %s\n", inputs[i]->path);
+          else if(s > 0) {
+            fmt = read_print(inputs[i], &r, fmt, ops, linewrap,
+                             rename_fh, &rename_buf);
+          } else {
+            seq_close(inputs[i]); inputs[i] = NULL; waiting_files--;
+          }
         }
       }
     }
   }
   else {
     for(i = 0; i < num_inputs; i++) {
-      while((s = seq_read(inputs[i],&r)) > 0)
-        fmt = read_print(inputs[i], &r, fmt, ops, linewrap);
-      if(s < 0) fprintf(stderr, "Error reading from: %s\n", inputs[i]->path);
+      while((s = seq_read(inputs[i],&r)) > 0) {
+        fmt = read_print(inputs[i], &r, fmt, ops, linewrap,
+                         rename_fh, &rename_buf);
+      }
+      if(s < 0) die("Error reading from: %s\n", inputs[i]->path);
       seq_close(inputs[i]);
     }
   }
@@ -471,8 +534,13 @@ int main(int argc, char **argv)
   seq_read_dealloc(&r);
 
   // Print random entries
-  _print_rnd_entries(nrand, nrand_len, fmt, linewrap);
+  _print_rnd_entries(nrand, nrand_len, fmt, linewrap, rename_fh, &rename_buf);
   free(nrand);
+
+  if(rename_fh) {
+    fclose(rename_fh);
+    buffer_dealloc(&rename_buf);
+  }
 
   return EXIT_SUCCESS;
 }
