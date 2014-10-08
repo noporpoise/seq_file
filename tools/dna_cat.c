@@ -28,6 +28,7 @@ Jan 2014, Public Domain
 #define OPS_COMPLEMENT  8
 #define OPS_MASK_LC    16 /* Mask lower case bases */
 #define OPS_NAME_ONLY  32 /* Only print read name */
+#define OPS_KEY        64 /* Print lexically lower of seq and reverse complement*/
 
 const char usage[] = "  Read and manipulate dna sequence.\n"
 #ifdef _USESAM
@@ -44,6 +45,7 @@ const char usage[] = "  Read and manipulate dna sequence.\n"
 "  -r,--revcmp      reverse complement sequence [i.e. -R and -C]\n"
 "  -R,--reverse     reverse sequence\n"
 "  -C,--complement  complement sequence\n"
+"  -k,--key         give lexically lower of sequence and reverse complement\n"
 "  -i,--interleave  interleave input files\n"
 "  -m,--mask        mask lowercase bases\n"
 "  -n,--rand <n>    print <n> random bases AFTER reading files\n"
@@ -68,6 +70,7 @@ static struct option longopts[] =
   {"reverse",    no_argument,       NULL, 'R'},
   {"complement", no_argument,       NULL, 'C'},
   {"interleave", no_argument,       NULL, 'i'},
+  {"key",        no_argument,       NULL, 'k'},
   {"mask",       no_argument,       NULL, 'm'},
   {"rand",       required_argument, NULL, 'n'},
   {"names",      no_argument,       NULL, 'N'},
@@ -99,6 +102,8 @@ void dief(const char *file, const char *func, int line, const char *fmt, ...)
   if(*(fmt + strlen(fmt) - 1) != '\n') fputc('\n', stderr);
   exit(EXIT_FAILURE);
 }
+
+#define inpathstr(p) (strcmp(p,"-") == 0 ? "STDIN" : p)
 
 char parse_entire_size(const char *str, size_t *result)
 {
@@ -152,7 +157,7 @@ void print_usage(const char *err, ...)
   if(err != NULL) {
     fputc('\n', stderr);
     va_list argptr;
-    fprintf(stderr, "%s Error: ", cmdstr);
+    fprintf(stderr, "Error: ");
     va_start(argptr, err);
     vfprintf(stderr, err, argptr);
     va_end(argptr);
@@ -181,98 +186,37 @@ static void seed_random()
   srand(h);
 }
 
-// @fast if true skip reading over all reads
-static void file_stat(seq_file_t *sf, read_t *r, uint8_t ops, bool fast)
+// compare seq with the reverse complement of itself
+int dna_rc_ncasecmp(const char *seq, size_t len)
 {
-  if(ops && fast)
-    print_usage("-S,--fast-stat is not compatible with -l,-u,-r,-R,-C,-m");
-
-  if(ops & ~(OPS_UPPERCASE | OPS_LOWERCASE))
-    print_usage("-s,--stat and -S,--fast-stat are not compatible with -r,-R,-C,-m");
-
-  printf("File: %s\n", sf->path);
-
-  int minq = -1, maxq = -1, s, fmti;
-
-  fmti = seq_guess_fastq_format(sf, &minq, &maxq);
-  s = seq_read(sf,r);
-
-  if(s < 0) die("Error reading file: %s\n", sf->path);
-  if(s == 0) die("Cannot get any reads from file: %s\n", sf->path);
-
-  const char zstr[] = " (read with zlib)";
-
-  if(seq_is_sam(sf)) printf("  Format: SAM\n");
-  if(seq_is_bam(sf)) printf("  Format: BAM\n");
-  if(seq_is_fasta(sf)) printf("  Format: FASTA%s\n", seq_use_gzip(sf) ? zstr : "");
-  if(seq_is_fastq(sf)) printf("  Format: FASTQ%s\n", seq_use_gzip(sf) ? zstr : "");
-  if(seq_is_plain(sf)) printf("  Format: plain%s\n", seq_use_gzip(sf) ? zstr : "");
-
-  char print_qstat = (seq_is_fastq(sf) || seq_is_sam(sf) || seq_is_bam(sf));
-
-  if(print_qstat)
-  {
-    if(fmti == -1) printf("  Couldn't get any quality scores\n");
-    else {
-      printf("  Format QScores: %s, offset: %i, min: %i, max: %i, scores: [%i,%i]\n",
-             FASTQ_FORMATS[fmti], FASTQ_OFFSET[fmti], FASTQ_MIN[fmti], FASTQ_MAX[fmti],
-             FASTQ_MIN[fmti]-FASTQ_OFFSET[fmti], FASTQ_MAX[fmti]-FASTQ_OFFSET[fmti]);
-      printf("  QScore range in first 500bp: [%i,%i]\n", minq, maxq);
-    }
+  size_t i, j;
+  for(i = 0, j = len-1; i < len; i++, j--) {
+    int cmp = (int)tolower(seq[i]) - tolower(seq_char_complement(seq[j]));
+    if(cmp) return cmp;
   }
+  return 0;
+}
 
-  if(!fast)
-  {
-    // We've already read one read
-    size_t i, char_count[256] = {0};
-    size_t total_len = r->seq.end, nreads = 1;
-    size_t min_rlen = total_len, max_rlen = r->seq.end;
-
-    if(ops & OPS_UPPERCASE)       seq_read_to_uppercase(r);
-    else if(ops & OPS_LOWERCASE)  seq_read_to_lowercase(r);
-    for(i = 0; i < r->seq.end; i++)
-      char_count[(uint8_t)r->seq.b[i]]++;
-
-    while((s = seq_read(sf,r)) > 0) {
-      total_len += r->seq.end;
-      max_rlen = r->seq.end > max_rlen ? r->seq.end : max_rlen;
-      min_rlen = r->seq.end < min_rlen ? r->seq.end : min_rlen;
-      nreads++;
-
-      if(ops & OPS_UPPERCASE)       seq_read_to_uppercase(r);
-      else if(ops & OPS_LOWERCASE)  seq_read_to_lowercase(r);
-      for(i = 0; i < r->seq.end; i++)
-        char_count[(uint8_t)r->seq.b[i]]++;
-    }
-
-    size_t mean_rlen = (size_t)(((double)total_len / nreads) + 0.5);
-
-    char nbasesstr[50], nreadsstr[50];
-    char minrlenstr[50], maxrlenstr[50], meanrlenstr[50];
-    ulong_to_str(total_len, nbasesstr);
-    ulong_to_str(nreads, nreadsstr);
-    ulong_to_str(min_rlen, minrlenstr);
-    ulong_to_str(max_rlen, maxrlenstr);
-    ulong_to_str(mean_rlen, meanrlenstr);
-
-    printf("  Total seq (bp):     %s\n", nbasesstr);
-    printf("  Number of reads:    %s\n", nreadsstr);
-    printf("  Shortest read (bp): %s\n", minrlenstr);
-    printf("  Longest read  (bp): %s\n", maxrlenstr);
-    printf("  Mean length   (bp): %s\n", meanrlenstr);
-
-    printf("  Char Counts:\n");
-    for(i = 0; i < 256; i++) {
-      if(char_count[i]) {
-        if(isprint((char)i)) printf("      %c: %zu\n", (char)i, char_count[i]);
-        else                 printf(" (%3zu): %zu\n",        i, char_count[i]);
-      }
-    }
-
-    if(s < 0) die("Error reading file: %s\n", sf->path);
+// compare seq with the reverse of itself
+int dna_r_ncasecmp(const char *seq, size_t len)
+{
+  size_t i, j;
+  for(i = 0, j = len-1; i < len; i++, j--) {
+    int cmp = (int)tolower(seq[i]) - tolower(seq[j]);
+    if(cmp) return cmp;
   }
+  return 0;
+}
 
-  fputc('\n', stdout);
+// compare seq with the complement of itself
+int dna_c_ncasecmp(const char *seq, size_t len)
+{
+  size_t i;
+  for(i = 0; i < len; i++) {
+    int cmp = (int)tolower(seq[i]) - tolower(seq_char_complement(seq[i]));
+    if(cmp) return cmp;
+  }
+  return 0;
 }
 
 static inline bool _print_rename_hdr(FILE *rename_fh, CharBuffer *rnbuf,
@@ -296,17 +240,9 @@ static inline bool _print_rename_hdr(FILE *rename_fh, CharBuffer *rnbuf,
   return false;
 }
 
-// Returns format used
-static seq_format read_print(seq_file_t *sf, read_t *r,
-                             seq_format fmt, uint8_t ops, size_t linewrap,
-                             FILE *rename_fh, CharBuffer *rnbuf)
+static void process_read(read_t *r, uint8_t ops)
 {
   size_t i;
-  if(ops & OPS_UPPERCASE)       seq_read_to_uppercase(r);
-  else if(ops & OPS_LOWERCASE)  seq_read_to_lowercase(r);
-  if((ops & OPS_REVERSE) && (ops & OPS_COMPLEMENT)) seq_read_reverse_complement(r);
-  else if(ops & OPS_REVERSE)    seq_read_reverse(r);
-  else if(ops & OPS_COMPLEMENT) seq_read_complement(r);
 
   if(ops & OPS_MASK_LC) {
     for(i = 0; i < r->seq.end; i++) {
@@ -317,8 +253,36 @@ static seq_format read_print(seq_file_t *sf, read_t *r,
     }
   }
 
+  if(ops & OPS_UPPERCASE)       seq_read_to_uppercase(r);
+  else if(ops & OPS_LOWERCASE)  seq_read_to_lowercase(r);
+
+  if(ops & OPS_KEY) {
+    if((ops & OPS_REVERSE) && (ops & OPS_COMPLEMENT) &&
+       dna_rc_ncasecmp(r->seq.b, r->seq.end) > 0) {
+      seq_read_reverse_complement(r);
+    }
+    else if((ops & OPS_REVERSE     ) && dna_r_ncasecmp(r->seq.b, r->seq.end) > 0) {
+      seq_read_reverse(r);
+    } else if((ops & OPS_COMPLEMENT) && dna_c_ncasecmp(r->seq.b, r->seq.end) > 0) {
+      seq_read_complement(r);
+    }
+  }
+  else {
+    if((ops & OPS_REVERSE) && (ops & OPS_COMPLEMENT)) seq_read_reverse_complement(r);
+    else if(ops & OPS_REVERSE)    seq_read_reverse(r);
+    else if(ops & OPS_COMPLEMENT) seq_read_complement(r);
+  }
+}
+
+// Returns format used
+static seq_format read_print(seq_file_t *sf, read_t *r,
+                             seq_format fmt, uint8_t ops, size_t linewrap,
+                             FILE *rename_fh, CharBuffer *rnbuf)
+{
+  process_read(r, ops);
+
   if(fmt == SEQ_FMT_UNKNOWN) {
-    // default to plain format is printint names only with no fmt specified
+    // default to plain format is printing names only with no fmt specified
     if(ops & OPS_NAME_ONLY) fmt = SEQ_FMT_PLAIN;
     else if(seq_is_plain(sf)) fmt = SEQ_FMT_PLAIN;
     else if(seq_is_fasta(sf)) fmt = SEQ_FMT_FASTA;
@@ -386,6 +350,95 @@ static inline void _print_rnd_entries(const size_t *lens, size_t nentries,
   }
 }
 
+// @fast if true skip reading over all reads
+static void file_stat(seq_file_t *sf, read_t *r, uint8_t ops, bool fast)
+{
+  if(ops && fast)
+    print_usage("-S,--fast-stat is not compatible with -l,-u,-r,-R,-C,-m");
+
+  if(ops & ~(OPS_UPPERCASE | OPS_LOWERCASE))
+    print_usage("-s,--stat and -S,--fast-stat are not compatible with -r,-R,-C,-m");
+
+  printf("File: %s\n", inpathstr(sf->path));
+
+  int minq = -1, maxq = -1, s, fmti;
+
+  fmti = seq_guess_fastq_format(sf, &minq, &maxq);
+  s = seq_read(sf,r);
+
+  if(s < 0) die("Error reading file: %s\n", inpathstr(sf->path));
+  if(s == 0) die("Cannot get any reads from file: %s\n", inpathstr(sf->path));
+
+  const char zstr[] = " (read with zlib)";
+
+  if(seq_is_sam(sf)) printf("  Format: SAM\n");
+  if(seq_is_bam(sf)) printf("  Format: BAM\n");
+  if(seq_is_fasta(sf)) printf("  Format: FASTA%s\n", seq_use_gzip(sf) ? zstr : "");
+  if(seq_is_fastq(sf)) printf("  Format: FASTQ%s\n", seq_use_gzip(sf) ? zstr : "");
+  if(seq_is_plain(sf)) printf("  Format: plain%s\n", seq_use_gzip(sf) ? zstr : "");
+
+  char print_qstat = (seq_is_fastq(sf) || seq_is_sam(sf) || seq_is_bam(sf));
+
+  if(print_qstat)
+  {
+    if(fmti == -1) printf("  Couldn't get any quality scores\n");
+    else {
+      printf("  Format QScores: %s, offset: %i, min: %i, max: %i, scores: [%i,%i]\n",
+             FASTQ_FORMATS[fmti], FASTQ_OFFSET[fmti], FASTQ_MIN[fmti], FASTQ_MAX[fmti],
+             FASTQ_MIN[fmti]-FASTQ_OFFSET[fmti], FASTQ_MAX[fmti]-FASTQ_OFFSET[fmti]);
+      printf("  QScore range in first 500bp: [%i,%i]\n", minq, maxq);
+    }
+  }
+
+  if(!fast)
+  {
+    // We've already read one read
+    size_t i, char_count[256] = {0};
+    size_t total_len = 0, nreads = 0;
+    size_t min_rlen = SIZE_MAX, max_rlen = 0;
+
+    do {
+      process_read(r, ops);
+      total_len += r->seq.end;
+      max_rlen = r->seq.end > max_rlen ? r->seq.end : max_rlen;
+      min_rlen = r->seq.end < min_rlen ? r->seq.end : min_rlen;
+      nreads++;
+
+      for(i = 0; i < r->seq.end; i++)
+        char_count[(uint8_t)r->seq.b[i]]++;
+    }
+    while((s = seq_read(sf,r)) > 0);
+
+    size_t mean_rlen = (size_t)(((double)total_len / nreads) + 0.5);
+
+    char nbasesstr[50], nreadsstr[50];
+    char minrlenstr[50], maxrlenstr[50], meanrlenstr[50];
+    ulong_to_str(total_len, nbasesstr);
+    ulong_to_str(nreads, nreadsstr);
+    ulong_to_str(min_rlen, minrlenstr);
+    ulong_to_str(max_rlen, maxrlenstr);
+    ulong_to_str(mean_rlen, meanrlenstr);
+
+    printf("  Total seq (bp):     %s\n", nbasesstr);
+    printf("  Number of reads:    %s\n", nreadsstr);
+    printf("  Shortest read (bp): %s\n", minrlenstr);
+    printf("  Longest read  (bp): %s\n", maxrlenstr);
+    printf("  Mean length   (bp): %s\n", meanrlenstr);
+
+    printf("  Char Counts:\n");
+    for(i = 0; i < 256; i++) {
+      if(char_count[i]) {
+        if(isprint((char)i)) printf("      %c: %zu\n", (char)i, char_count[i]);
+        else                 printf(" (%3zu): %zu\n",        i, char_count[i]);
+      }
+    }
+
+    if(s < 0) die("Error reading file: %s\n", inpathstr(sf->path));
+  }
+
+  fputc('\n', stdout);
+}
+
 static void vector_push(size_t **ptr, size_t *len, size_t *cap, size_t x)
 {
   if(!*ptr || *len >= *cap) {
@@ -432,6 +485,7 @@ int main(int argc, char **argv)
       case 'C': ops |= OPS_COMPLEMENT; break;
       case 'm': ops |= OPS_MASK_LC;    break;
       case 'N': ops |= OPS_NAME_ONLY;  break;
+      case 'k': ops |= OPS_KEY;        break;
       case 'n':
         if(!parse_entire_size(optarg, &tmprnd))
           print_usage("Bad -n argument: %s\n", optarg);
@@ -469,6 +523,9 @@ int main(int argc, char **argv)
   if((ops & OPS_NAME_ONLY) && ((ops &~OPS_NAME_ONLY) || nrand_len))
     print_usage("Cannot use --names with other options");
 
+  if((ops & OPS_KEY) && !(ops & (OPS_REVERSE | OPS_COMPLEMENT)))
+    print_usage("Must use --key with one of --reverse, --complment, --revcmp");
+
   if(stat && (interleave || linewrap || fmt || nrand_len || ops))
     print_usage("-s,--stat is not compatible with other options");
 
@@ -481,7 +538,7 @@ int main(int argc, char **argv)
   if(rename_path) {
     if(strcmp(rename_path,"-") == 0) rename_fh = stdin;
     else if((rename_fh = fopen(rename_path, "r")) == NULL)
-      die("Cannot open --rename file: %s", rename_path);
+      die("Cannot open --rename file: %s", inpathstr(rename_path));
     if(!buffer_alloc(&rename_buf, 1024)) die("Out of memory%c", '!');
   }
 
@@ -495,7 +552,7 @@ int main(int argc, char **argv)
 
   for(i = 0; i < num_inputs; i++) {
     if((inputs[i] = seq_open(input_paths[i])) == NULL)
-      print_usage("Couldn't read file: %s\n", input_paths[i]);
+      print_usage("Couldn't read file: %s\n", inpathstr(input_paths[i]));
   }
 
   if(stat || fast_stat) {

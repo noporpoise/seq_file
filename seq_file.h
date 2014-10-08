@@ -399,19 +399,6 @@ _func_read_unknown(_seq_read_unknown_gz,     _sf_gzgetc,     _sf_gzungetc,     _
 _func_read_unknown(_seq_read_unknown_f_buf,  _sf_fgetc_buf,  _sf_fungetc_buf,  _sf_fskipline,  _seq_read_fastq_f_buf,  _seq_read_fasta_f_buf,  _seq_read_plain_f_buf)
 _func_read_unknown(_seq_read_unknown_gz_buf, _sf_gzgetc_buf, _sf_gzungetc_buf, _sf_gzskipline, _seq_read_fastq_gz_buf, _seq_read_fasta_gz_buf, _seq_read_plain_gz_buf)
 
-static inline void _seq_file_init(seq_file_t *sf)
-{
-  sf->gz_file = NULL;
-  sf->f_file = NULL;
-  #ifdef _USESAM
-    sf->s_file = NULL;
-  #endif
-  sf->in.size = sf->in.begin = sf->in.end = 0;
-  sf->path = sf->in.b = NULL;
-  sf->format = SEQ_FMT_UNKNOWN;
-  sf->rhead = sf->rtail = NULL;
-}
-
 // Returns 1 on success 0 if out of memory
 static inline char _seq_setup(seq_file_t *sf, char use_zlib, size_t buf_size)
 {
@@ -467,7 +454,6 @@ static inline seq_file_t* seq_open2(const char *p, char sam_bam,
                                     char use_zlib, size_t buf_size)
 {
   seq_file_t *sf = calloc(1, sizeof(seq_file_t));
-  _seq_file_init(sf);
 
   if(sam_bam)
   {
@@ -514,7 +500,6 @@ static inline seq_file_t* seq_open_fh(FILE *fh, char sam_bam,
                                       char use_zlib, size_t buf_size)
 {
   seq_file_t *sf = calloc(1, sizeof(seq_file_t));
-  _seq_file_init(sf);
 
   if(sam_bam)
   {
@@ -562,6 +547,24 @@ static inline seq_file_t* seq_open(const char *p)
   return seq_open2(p, sam_bam, 1, DEFAULT_BUFSIZE);
 }
 
+/*
+// returns 0 on success, -1 on failure
+static inline int seq_seek_start(seq_file_t *sf)
+{
+  buffer_reset(&sf->in);
+  if((sf->f_file  != NULL &&  fseek(sf->f_file,  0, SEEK_SET) != 0) ||
+     (sf->gz_file != NULL && gzseek(sf->gz_file, 0, SEEK_SET) != 0))
+  {
+    fprintf(stderr, "%s failed: %s\n", sf->f_file ? "fseek" : "gzseek", sf->path);
+    return -1;
+  } else if(sf->f_file == NULL && sf->gz_file == NULL) {
+    fprintf(stderr, "Cannot currently reopen sam/bam files");
+    return -1;
+  }
+  return 0;
+}
+*/
+
 // Close file handles, free resources
 static inline void seq_close(seq_file_t *sf)
 {
@@ -575,7 +578,17 @@ static inline void seq_close(seq_file_t *sf)
   free(sf->path); sf->path = NULL;
   read_t *r = sf->rhead, *tmpr;
   while(r != NULL) { tmpr = r->next; seq_read_free(r); r = tmpr; }
+  memset(sf, 0, sizeof(*sf));
   free(sf);
+}
+
+static inline seq_file_t* seq_reopen(seq_file_t *sf)
+{
+  char *path = strdup(sf->path);
+  seq_close(sf);
+  sf = seq_open(path);
+  free(path);
+  return sf;
 }
 
 // Get min/max qual scores by reading sequences into buffer and reporting min/max
@@ -659,7 +672,7 @@ static inline char _seq_read_looks_valid(read_t *r, const char *alphabet)
 #define seq_read_looks_valid_protein(r) \
         _seq_read_looks_valid(r,"acdefghiklmnopqrstuvwy")
 
-static inline char _seq_char_complement(char c) {
+static inline char seq_char_complement(char c) {
   switch(c) {
     case 'a': return 't'; case 'A': return 'T';
     case 'c': return 'g'; case 'C': return 'G';
@@ -699,7 +712,7 @@ static inline void seq_read_complement(read_t *r)
 {
   size_t i;
   for(i=0; i < r->seq.end; i++)
-    r->seq.b[i] = _seq_char_complement(r->seq.b[i]);
+    r->seq.b[i] = seq_char_complement(r->seq.b[i]);
 }
 
 static inline void seq_read_reverse_complement(read_t *r)
@@ -709,12 +722,12 @@ static inline void seq_read_reverse_complement(read_t *r)
 
   if(r->qual.end > 0) _seq_read_force_qual_seq_lmatch(r);
   if(r->seq.end == 0) return;
-  if(r->seq.end == 1){ r->seq.b[0] = _seq_char_complement(r->seq.b[0]); return; }
+  if(r->seq.end == 1){ r->seq.b[0] = seq_char_complement(r->seq.b[0]); return; }
 
   for(i=0, j=r->seq.end-1; i <= j; i++, j--) {
     swap = r->seq.b[i];
-    r->seq.b[i] = _seq_char_complement(r->seq.b[j]);
-    r->seq.b[j] = _seq_char_complement(swap);
+    r->seq.b[i] = seq_char_complement(r->seq.b[j]);
+    r->seq.b[j] = seq_char_complement(swap);
   }
 
   if(r->qual.end > 0) {
