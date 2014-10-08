@@ -256,21 +256,16 @@ static void process_read(read_t *r, uint8_t ops)
   if(ops & OPS_UPPERCASE)       seq_read_to_uppercase(r);
   else if(ops & OPS_LOWERCASE)  seq_read_to_lowercase(r);
 
-  if(ops & OPS_KEY) {
-    if((ops & OPS_REVERSE) && (ops & OPS_COMPLEMENT) &&
-       dna_rc_ncasecmp(r->seq.b, r->seq.end) > 0) {
+  if((ops & OPS_REVERSE) && (ops & OPS_COMPLEMENT)) {
+    if(!(ops & OPS_KEY) || dna_rc_ncasecmp(r->seq.b, r->seq.end) > 0)
       seq_read_reverse_complement(r);
-    }
-    else if((ops & OPS_REVERSE     ) && dna_r_ncasecmp(r->seq.b, r->seq.end) > 0) {
-      seq_read_reverse(r);
-    } else if((ops & OPS_COMPLEMENT) && dna_c_ncasecmp(r->seq.b, r->seq.end) > 0) {
-      seq_read_complement(r);
-    }
   }
-  else {
-    if((ops & OPS_REVERSE) && (ops & OPS_COMPLEMENT)) seq_read_reverse_complement(r);
-    else if(ops & OPS_REVERSE)    seq_read_reverse(r);
-    else if(ops & OPS_COMPLEMENT) seq_read_complement(r);
+  else if((ops & OPS_REVERSE)) {
+    if(!(ops & OPS_KEY) || dna_r_ncasecmp(r->seq.b, r->seq.end) > 0)
+      seq_read_reverse(r);
+  } else if((ops & OPS_COMPLEMENT)) {
+    if(!(ops & OPS_KEY) || dna_c_ncasecmp(r->seq.b, r->seq.end) > 0)
+      seq_read_complement(r);
   }
 }
 
