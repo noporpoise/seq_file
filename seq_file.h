@@ -14,6 +14,7 @@ Jan 2014, Public Domain
 #include <ctype.h>
 #include <limits.h>
 #include <zlib.h>
+#include <assert.h>
 
 // #define _USESAM 1
 
@@ -538,6 +539,7 @@ static inline seq_file_t* seq_open_fh(FILE *fh, char sam_bam,
 
 static inline seq_file_t* seq_open(const char *p)
 {
+  assert(p != NULL);
   if(strcmp(p,"-") == 0) return seq_open_fh(stdin, 0, 1, DEFAULT_BUFSIZE);
 
   seq_format format = seq_guess_filetype_from_extension(p);
