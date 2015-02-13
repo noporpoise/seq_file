@@ -540,7 +540,7 @@ static inline seq_file_t* seq_open_fh(FILE *fh, char sam_bam,
 static inline seq_file_t* seq_open(const char *p)
 {
   assert(p != NULL);
-  if(strcmp(p,"-") == 0) return seq_open_fh(stdin, 0, 1, DEFAULT_BUFSIZE);
+  if(strcmp(p,"-") == 0) return seq_open_fh(stdin, 0, 1, 0);
 
   seq_format format = seq_guess_filetype_from_extension(p);
   char sam_bam = 0;
