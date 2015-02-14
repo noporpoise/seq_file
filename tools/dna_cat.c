@@ -86,9 +86,9 @@ const char *cmdstr;
 const char bases[] = "ACGT";
 
 #define die(fmt,...) do { \
-  fprintf(stderr, "[%s:%i] Error: %s() "fmt"\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__); \
+  fprintf(stderr, "[%s:%i] Error: %s() "fmt"\n", __FILE__, __LINE__, __func__, __VA_ARGS__); \
   exit(EXIT_FAILURE); \
-} while(0);
+} while(0)
 
 #define inpathstr(p) (strcmp(p,"-") == 0 ? "STDIN" : p)
 
