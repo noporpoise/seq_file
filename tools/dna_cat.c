@@ -85,23 +85,10 @@ const char *cmdstr;
 
 const char bases[] = "ACGT";
 
-#define die(fmt, ...) dief(__FILE__, __func__, __LINE__, fmt, __VA_ARGS__)
-
-void dief(const char *file, const char *func, int line, const char *fmt, ...)
-__attribute__((format(printf, 4, 5)))
-__attribute__((noreturn));
-
-void dief(const char *file, const char *func, int line, const char *fmt, ...)
-{
-  va_list argptr;
-  fflush(stdout);
-  fprintf(stderr, "[%s:%i] Error %s(): ", file, line, func);
-  va_start(argptr, fmt);
-  vfprintf(stderr, fmt, argptr);
-  va_end(argptr);
-  if(*(fmt + strlen(fmt) - 1) != '\n') fputc('\n', stderr);
-  exit(EXIT_FAILURE);
-}
+#define die(fmt,...) do { \
+  fprintf(stderr, "[%s:%i] Error: %s() "fmt"\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__); \
+  exit(EXIT_FAILURE); \
+} while(0);
 
 #define inpathstr(p) (strcmp(p,"-") == 0 ? "STDIN" : p)
 
@@ -364,13 +351,13 @@ static void file_stat(seq_file_t *sf, read_t *r, uint8_t ops, bool fast)
   if(s < 0) die("Error reading file: %s\n", inpathstr(sf->path));
   if(s == 0) die("Cannot get any reads from file: %s\n", inpathstr(sf->path));
 
-  const char zstr[] = " (read with zlib)";
-
   if(seq_is_sam(sf)) printf("  Format: SAM\n");
   if(seq_is_bam(sf)) printf("  Format: BAM\n");
-  if(seq_is_fasta(sf)) printf("  Format: FASTA%s\n", seq_use_gzip(sf) ? zstr : "");
-  if(seq_is_fastq(sf)) printf("  Format: FASTQ%s\n", seq_use_gzip(sf) ? zstr : "");
-  if(seq_is_plain(sf)) printf("  Format: plain%s\n", seq_use_gzip(sf) ? zstr : "");
+  if(seq_is_fasta(sf)) printf("  Format: FASTA\n");
+  if(seq_is_fastq(sf)) printf("  Format: FASTQ\n");
+  if(seq_is_plain(sf)) printf("  Format: plain\n");
+
+  if(seq_use_gzip(sf)) printf("  Read with zlib\n");
 
   char print_qstat = (seq_is_fastq(sf) || seq_is_sam(sf) || seq_is_bam(sf));
 
