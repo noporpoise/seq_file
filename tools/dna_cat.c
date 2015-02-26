@@ -22,13 +22,14 @@ Jan 2014, Public Domain
 
 #include "seq_file.h"
 
-#define OPS_UPPERCASE   1
-#define OPS_LOWERCASE   2
-#define OPS_REVERSE     4
-#define OPS_COMPLEMENT  8
-#define OPS_MASK_LC    16 /* Mask lower case bases */
-#define OPS_NAME_ONLY  32 /* Only print read name */
-#define OPS_KEY        64 /* Print lexically lower of seq and reverse complement*/
+#define OPS_UPPERCASE       1 /* Convert to uppercase */
+#define OPS_LOWERCASE       2 /* Convert to lowercase */
+#define OPS_REVERSE         4 /* Reverse reads */
+#define OPS_COMPLEMENT      8 /* Complement bases */
+#define OPS_MASK_LC        16 /* Mask lower case bases */
+#define OPS_NAME_ONLY      32 /* Print read name */
+#define OPS_PRINT_LENGTH   64 /* Print read length */
+#define OPS_KEY           128 /* Print lexically lower of seq and rev. complement */
 
 const char usage[] = "  Read and manipulate dna sequence.\n"
 #ifdef _USESAM
@@ -50,6 +51,7 @@ const char usage[] = "  Read and manipulate dna sequence.\n"
 "  -m,--mask        mask lowercase bases\n"
 "  -n,--rand <n>    print <n> random bases AFTER reading files\n"
 "  -N,--names       print read names only\n"
+"  -L,--lengths     print read names and lengths (implies -N)\n"
 "  -s,--stat        probe and print file info, summarise read lengths\n"
 "  -S,--fast-stat   probe and print file info only\n"
 "  -M,--rename <f>  read names from <f>, one per line\n"
@@ -74,13 +76,14 @@ static struct option longopts[] =
   {"mask",       no_argument,       NULL, 'm'},
   {"rand",       required_argument, NULL, 'n'},
   {"names",      no_argument,       NULL, 'N'},
+  {"lengths",    no_argument,       NULL, 'L'},
   {"stat",       required_argument, NULL, 's'},
   {"fast-stat",  required_argument, NULL, 'S'},
   {"rename",     required_argument, NULL, 'M'},
   {NULL, 0, NULL, 0}
 };
 
-const char shortopts[] = "hFQPw:ulrRCimn:NsSM:";
+const char shortopts[] = "hFQPw:ulrRCimn:NLsSM:";
 const char *cmdstr;
 
 const char bases[] = "ACGT";
@@ -283,11 +286,14 @@ static seq_format read_print(seq_file_t *sf, read_t *r,
 
   if(ops & OPS_NAME_ONLY) {
     switch(fmt) {
-      case SEQ_FMT_FASTA: printf(">%s\n", r->name.b); break;
-      case SEQ_FMT_FASTQ: printf("@%s\n", r->name.b); break;
-      case SEQ_FMT_PLAIN: printf("%s\n", r->name.b); break;
+      case SEQ_FMT_FASTA: fputc('>', stdout); break;
+      case SEQ_FMT_FASTQ: fputc('@', stdout); break;
+      case SEQ_FMT_PLAIN: break;
       default: die("Got value: %i\n", (int)fmt);
     }
+    fputs(r->name.b, stdout);
+    if(ops & OPS_PRINT_LENGTH) printf("\t%zu", r->seq.end);
+    fputc('\n', stdout);
   }
   else {
     switch(fmt) {
@@ -460,14 +466,15 @@ int main(int argc, char **argv)
         if(!parse_entire_size(optarg, &linewrap))
           print_usage("Bad -w argument: %s\n", optarg);
         break;
-      case 'u': ops |= OPS_UPPERCASE;  break;
-      case 'l': ops |= OPS_LOWERCASE;  break;
+      case 'u': ops |= OPS_UPPERCASE;    break;
+      case 'l': ops |= OPS_LOWERCASE;    break;
       case 'r': ops |= OPS_REVERSE | OPS_COMPLEMENT; break;
-      case 'R': ops |= OPS_REVERSE;    break;
-      case 'C': ops |= OPS_COMPLEMENT; break;
-      case 'm': ops |= OPS_MASK_LC;    break;
-      case 'N': ops |= OPS_NAME_ONLY;  break;
-      case 'k': ops |= OPS_KEY;        break;
+      case 'R': ops |= OPS_REVERSE;      break;
+      case 'C': ops |= OPS_COMPLEMENT;   break;
+      case 'm': ops |= OPS_MASK_LC;      break;
+      case 'N': ops |= OPS_NAME_ONLY;    break;
+      case 'L': ops |= OPS_NAME_ONLY | OPS_PRINT_LENGTH; break;
+      case 'k': ops |= OPS_KEY;          break;
       case 'n':
         if(!parse_entire_size(optarg, &tmprnd))
           print_usage("Bad -n argument: %s\n", optarg);
@@ -502,8 +509,11 @@ int main(int argc, char **argv)
   if((ops & OPS_UPPERCASE) && (ops & OPS_LOWERCASE))
     print_usage("Cannot use both -u,--uppercase and -l,--lowercase");
 
-  if((ops & OPS_NAME_ONLY) && ((ops &~OPS_NAME_ONLY) || nrand_len))
-    print_usage("Cannot use --names with other options");
+  if((ops & OPS_NAME_ONLY) &&
+     ((ops &~(OPS_NAME_ONLY|OPS_PRINT_LENGTH)) || nrand_len ||
+      (fmt != SEQ_FMT_PLAIN && fmt != SEQ_FMT_UNKNOWN))) {
+    print_usage("Cannot use -N,--names or -L,--lengths with other options");
+  }
 
   if((ops & OPS_KEY) && !(ops & (OPS_REVERSE | OPS_COMPLEMENT)))
     print_usage("Must use --key with one of --reverse, --complment, --revcmp");
