@@ -36,10 +36,10 @@ typedef enum
   SEQ_FMT_SAM = 8, SEQ_FMT_BAM = 16,
 } seq_format;
 
-typedef struct seq_file_t seq_file_t;
-typedef struct read_t read_t;
+typedef struct seq_file_struct seq_file_t;
+typedef struct read_struct read_t;
 
-struct seq_file_t
+struct seq_file_struct
 {
   char *path;
   FILE *f_file;
@@ -49,16 +49,16 @@ struct seq_file_t
     bam_hdr_t *bam_header;
   #endif
   int (*readfunc)(seq_file_t *sf, read_t *r);
-  CharBuffer in;
+  StreamBuffer in;
   seq_format format;
   // Reads pushed onto a 'read stack' aka buffer
   read_t *rhead, *rtail; // 'unread' reads, add to tail, return from head
   int (*origreadfunc)(seq_file_t *sf, read_t *r); // used when read = _seq_read_pop
 };
 
-struct read_t
+struct read_struct
 {
-  CharBuffer name, seq, qual;
+  StreamBuffer name, seq, qual;
   #ifdef _USESAM
     bam1_t *bam;
   #endif
@@ -109,9 +109,9 @@ static inline void seq_read_reset(read_t *r) {
 
 static inline void seq_read_dealloc(read_t *r)
 {
-  buffer_dealloc(&r->name);
-  buffer_dealloc(&r->seq);
-  buffer_dealloc(&r->qual);
+  strm_buf_dealloc(&r->name);
+  strm_buf_dealloc(&r->seq);
+  strm_buf_dealloc(&r->qual);
   #ifdef _USESAM
     free(r->bam);
   #endif
@@ -127,9 +127,9 @@ static inline read_t* seq_read_alloc(read_t *r)
   r->bam = NULL;
   #endif
 
-  if(!buffer_alloc(&r->name, 256) ||
-     !buffer_alloc(&r->seq, 256) ||
-     !buffer_alloc(&r->qual, 256))
+  if(!strm_buf_alloc(&r->name, 256) ||
+     !strm_buf_alloc(&r->seq,  256) ||
+     !strm_buf_alloc(&r->qual, 256))
   {
     seq_read_dealloc(r);
     return NULL;
@@ -141,7 +141,7 @@ static inline read_t* seq_read_alloc(read_t *r)
     }
   #endif
 
-  // buffer_alloc sets begin, end to 1, reset to 0
+  // strm_buf_alloc sets begin, end to 1, reset to 0
   seq_read_reset(r);
 
   return r;
@@ -179,11 +179,11 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *r)
   if(sam_read1(sf->s_file, sf->bam_header, r->bam) < 0) return 0;
 
   char *str = bam_get_qname(r->bam);
-  buffer_append_str(&r->name, str);
+  strm_buf_append_str(&r->name, str);
 
   size_t qlen = (size_t)r->bam->core.l_qseq;
-  buffer_ensure_capacity(&r->seq, qlen);
-  buffer_ensure_capacity(&r->qual, qlen);
+  strm_buf_ensure_capacity(&r->seq, qlen);
+  strm_buf_ensure_capacity(&r->qual, qlen);
   uint8_t *bamseq = bam_get_seq(r->bam);
   uint8_t *bamqual = bam_get_qual(r->bam);
 
@@ -224,20 +224,20 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *r)
                                                                                \
     if(c == -1) return 0;                                                      \
     if(c != '@' || __readline(sf, r->name) == 0) return -1;                    \
-    buffer_chomp(&(r->name));                                                  \
+    strm_buf_chomp(&(r->name));                                                \
                                                                                \
     while((c = __getc(sf)) != '+') {                                           \
       if(c == -1) return -1;                                                   \
       if(c != '\r' && c != '\n') {                                             \
-        buffer_append_char(&r->seq,(char)c);                                   \
+        strm_buf_append_char(&r->seq,(char)c);                                 \
         if(__readline(sf, r->seq) == 0) return -1;                             \
-        buffer_chomp(&(r->seq));                                               \
+        strm_buf_chomp(&(r->seq));                                             \
       }                                                                        \
     }                                                                          \
     while((c = __getc(sf)) != -1 && c != '\n');                                \
     if(c == -1) return -1;                                                     \
     do {                                                                       \
-      if(__readline(sf,r->qual) > 0) buffer_chomp(&(r->qual));                 \
+      if(__readline(sf,r->qual) > 0) strm_buf_chomp(&(r->qual));               \
       else return 1;                                                           \
     } while(r->qual.end < r->seq.end);                                         \
     while((c = __getc(sf)) != -1 && c != '@');                                 \
@@ -253,14 +253,14 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *r)
                                                                                \
     if(c == -1) return 0;                                                      \
     if(c != '>' || __readline(sf, r->name) == 0) return -1;                    \
-    buffer_chomp(&(r->name));                                                  \
+    strm_buf_chomp(&(r->name));                                                \
                                                                                \
     while((c = __getc(sf)) != '>') {                                           \
       if(c == -1) return 1;                                                    \
       if(c != '\r' && c != '\n') {                                             \
-        buffer_append_char(&r->seq,(char)c);                                   \
+        strm_buf_append_char(&r->seq,(char)c);                                 \
         long nread = (long)__readline(sf, r->seq);                             \
-        buffer_chomp(&(r->seq));                                               \
+        strm_buf_chomp(&(r->seq));                                             \
         if(nread <= 0) return 1;                                               \
       }                                                                        \
     }                                                                          \
@@ -276,9 +276,9 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *r)
     seq_read_reset(r);                                                         \
     while((c = __getc(sf)) != -1 && isspace(c)) if(c != '\n') __skipline(sf);  \
     if(c == -1) return 0;                                                      \
-    buffer_append_char(&r->seq, (char)c);                                      \
+    strm_buf_append_char(&r->seq, (char)c);                                    \
     __readline(sf, r->seq);                                                    \
-    buffer_chomp(&(r->seq));                                                   \
+    strm_buf_chomp(&(r->seq));                                                 \
     return 1;                                                                  \
   }
 
@@ -404,7 +404,7 @@ _func_read_unknown(_seq_read_unknown_gz_buf, _sf_gzgetc_buf, _sf_gzungetc_buf, _
 static inline char _seq_setup(seq_file_t *sf, char use_zlib, size_t buf_size)
 {
   if(buf_size) {
-    if(!buffer_alloc(&sf->in, buf_size)) { free(sf); return 0; }
+    if(!strm_buf_alloc(&sf->in, buf_size)) { free(sf); return 0; }
     sf->origreadfunc = use_zlib ? _seq_read_unknown_gz_buf : _seq_read_unknown_f_buf;
   }
   else sf->origreadfunc = use_zlib ? _seq_read_unknown_gz : _seq_read_unknown_f;
@@ -553,7 +553,7 @@ static inline seq_file_t* seq_open(const char *p)
 // returns 0 on success, -1 on failure
 static inline int seq_seek_start(seq_file_t *sf)
 {
-  buffer_reset(&sf->in);
+  strm_buf_reset(&sf->in);
   if((sf->f_file  != NULL &&  fseek(sf->f_file,  0, SEEK_SET) != 0) ||
      (sf->gz_file != NULL && gzseek(sf->gz_file, 0, SEEK_SET) != 0))
   {
@@ -576,7 +576,7 @@ static inline void seq_close(seq_file_t *sf)
   if(sf->s_file != NULL) { sam_close(sf->s_file); sf->s_file = NULL; }
   if(sf->bam_header != NULL) { free(sf->bam_header); sf->bam_header = NULL; }
   #endif
-  buffer_dealloc(&sf->in);
+  strm_buf_dealloc(&sf->in);
   free(sf->path); sf->path = NULL;
   read_t *r = sf->rhead, *tmpr;
   while(r != NULL) { tmpr = r->next; seq_read_free(r); r = tmpr; }
@@ -689,7 +689,7 @@ static inline void _seq_read_force_qual_seq_lmatch(read_t *r)
 {
   size_t i;
   if(r->qual.end < r->seq.end) {
-    buffer_ensure_capacity(&(r->qual), r->seq.end);
+    strm_buf_ensure_capacity(&(r->qual), r->seq.end);
     for(i = r->qual.end; i < r->seq.end; i++) r->qual.b[i] = '.';
   }
   r->qual.b[r->qual.end = r->seq.end] = '\0';
