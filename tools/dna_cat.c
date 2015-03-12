@@ -209,14 +209,14 @@ int dna_c_ncasecmp(const char *seq, size_t len)
   return 0;
 }
 
-static inline bool _print_rename_hdr(FILE *rename_fh, CharBuffer *rnbuf,
+static inline bool _print_rename_hdr(FILE *rename_fh, StreamBuffer *rnbuf,
                                      seq_format fmt)
 {
   if((fmt == SEQ_FMT_FASTA || fmt == SEQ_FMT_FASTQ) && rename_fh)
   {
-    buffer_reset(rnbuf);
+    strm_buf_reset(rnbuf);
     if(!freadline(rename_fh, &rnbuf->b, &rnbuf->end, &rnbuf->size)) return false;
-    buffer_chomp(rnbuf);
+    strm_buf_chomp(rnbuf);
 
     // Strip off @ or > char at beginning
     if(rnbuf->begin < rnbuf->end &&
@@ -262,7 +262,7 @@ static void process_read(read_t *r, uint8_t ops)
 // Returns format used
 static seq_format read_print(seq_file_t *sf, read_t *r,
                              seq_format fmt, uint8_t ops, size_t linewrap,
-                             FILE *rename_fh, CharBuffer *rnbuf)
+                             FILE *rename_fh, StreamBuffer *rnbuf)
 {
   process_read(r, ops);
 
@@ -276,9 +276,9 @@ static seq_format read_print(seq_file_t *sf, read_t *r,
 
   /* Overwrite read name with rename buffer */
   if(_print_rename_hdr(rename_fh, rnbuf, fmt)) {
-    // CharBuffer tmp = r->name; r->name = *rnbuf; *rnbuf = tmp;
-    size_t len = buffer_len(rnbuf);
-    buffer_ensure_capacity(&r->name, len);
+    // StreamBuffer tmp = r->name; r->name = *rnbuf; *rnbuf = tmp;
+    size_t len = strm_buf_len(rnbuf);
+    strm_buf_ensure_capacity(&r->name, len);
     memcpy(r->name.b, rnbuf->b+rnbuf->begin, len);
     r->name.begin = 0;
     r->name.b[r->name.end = len] = '\0';
@@ -309,7 +309,7 @@ static seq_format read_print(seq_file_t *sf, read_t *r,
 
 static inline void _print_rnd_entries(const size_t *lens, size_t nentries,
                                       uint8_t fmt, size_t linewrap,
-                                      FILE *rename_fh, CharBuffer *rnbuf)
+                                      FILE *rename_fh, StreamBuffer *rnbuf)
 {
   size_t i, j, k, rnd = 0;
 
@@ -525,13 +525,13 @@ int main(int argc, char **argv)
     print_usage("Cannot use -s,--stat and -S--fast-stat together");
 
   FILE *rename_fh = NULL;
-  CharBuffer rename_buf;
+  StreamBuffer rename_buf;
 
   if(rename_path) {
     if(strcmp(rename_path,"-") == 0) rename_fh = stdin;
     else if((rename_fh = fopen(rename_path, "r")) == NULL)
       die("Cannot open --rename file: %s", inpathstr(rename_path));
-    if(!buffer_alloc(&rename_buf, 1024)) die("Out of memory%c", '!');
+    if(!strm_buf_alloc(&rename_buf, 1024)) die("Out of memory%c", '!');
   }
 
   if(nrand_len) seed_random();
@@ -588,7 +588,7 @@ int main(int argc, char **argv)
 
   if(rename_fh) {
     fclose(rename_fh);
-    buffer_dealloc(&rename_buf);
+    strm_buf_dealloc(&rename_buf);
   }
 
   return EXIT_SUCCESS;
