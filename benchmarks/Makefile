@@ -1,5 +1,5 @@
 ifdef HTSLIB
-	HTSARGS=-I $(HTSLIB)/htslib -D_USESAM=1 $(HTSLIB)/libhts.a -lm
+	HTSARGS=-I $(HTSLIB) -D_USESAM=1 $(HTSLIB)/libhts.a -lm
 endif
 
 CFLAGS=-Wall -Wextra -I ..

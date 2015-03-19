@@ -12,7 +12,7 @@ int main(int argc, char **argv)
   }
 
   print_prompt();
-  seq_file_t *file = seq_open_fh(stdin, 0, 0, 0);
+  seq_file_t *file = seq_dopen(fileno(stdin), 0, 0, 0);
 
   if(file == NULL)
   {
