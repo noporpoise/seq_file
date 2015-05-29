@@ -46,13 +46,13 @@ struct seq_file_struct
   char *path;
   FILE *f_file;
   gzFile gz_file;
-  #ifdef _USESAM
-    htsFile *s_file;
-    bam_hdr_t *bam_hdr;
-  #endif
+  void *hts_file; // cast to (htsFile*)
+  void *bam_hdr; // cast to (bam_hdr_t*)
+
   int (*readfunc)(seq_file_t *sf, read_t *r);
   StreamBuffer in;
   seq_format format;
+
   // Reads pushed onto a 'read stack' aka buffer
   read_t *rhead, *rtail; // 'unread' reads, add to tail, return from head
   int (*origreadfunc)(seq_file_t *sf, read_t *r); // used when read = _seq_read_pop
@@ -61,12 +61,19 @@ struct seq_file_struct
 struct read_struct
 {
   StreamBuffer name, seq, qual;
-  #ifdef _USESAM
-    bam1_t *bam;
-  #endif
+  void *bam; // cast to (bam1_t*) get/set with seq_read_bam()
   read_t *next; // for use in a linked list
   bool from_sam; // from sam or bam
 };
+
+#define seq_read_init {.name = strm_buf_init, \
+                       .seq  = strm_buf_init, \
+                       .qual = strm_buf_init, \
+                       .bam = NULL, .next = NULL, .from_sam = false}
+
+#ifdef _USESAM
+  #define seq_read_bam(r) ((bam1_t*)(r)->bam)
+#endif
 
 #define seq_is_bam(sf) ((sf)->format == SEQ_FMT_BAM)
 #define seq_is_sam(sf) ((sf)->format == SEQ_FMT_SAM)
@@ -117,19 +124,14 @@ static inline void seq_read_dealloc(read_t *r)
   strm_buf_dealloc(&r->seq);
   strm_buf_dealloc(&r->qual);
   #ifdef _USESAM
-    free(r->bam);
+    bam_destroy1(r->bam);
   #endif
   memset(r, 0, sizeof(read_t));
 }
 
 static inline read_t* seq_read_alloc(read_t *r)
 {
-  r->name.b = r->seq.b = r->qual.b = NULL;
-  r->from_sam = false;
-  r->next = NULL;
-  #ifdef _USESAM
-  r->bam = NULL;
-  #endif
+  memset(r, 0, sizeof(read_t));
 
   if(!strm_buf_alloc(&r->name, 256) ||
      !strm_buf_alloc(&r->seq,  256) ||
@@ -180,19 +182,20 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *r)
   r->name.end = r->seq.end = r->qual.end = 0;
   r->name.b[0] = r->seq.b[0] = r->qual.b[0] = '\0';
 
-  if(sam_read1(sf->s_file, sf->bam_hdr, r->bam) < 0) return 0;
+  if(sam_read1(sf->hts_file, sf->bam_hdr, r->bam) < 0) return 0;
 
-  char *str = bam_get_qname(r->bam);
+  const bam1_t *b = seq_read_bam(r);
+  char *str = bam_get_qname(b);
   strm_buf_append_str(&r->name, str);
 
-  size_t qlen = (size_t)r->bam->core.l_qseq;
+  size_t qlen = (size_t)b->core.l_qseq;
   strm_buf_ensure_capacity(&r->seq, qlen);
   strm_buf_ensure_capacity(&r->qual, qlen);
-  uint8_t *bamseq = bam_get_seq(r->bam);
-  uint8_t *bamqual = bam_get_qual(r->bam);
+  const uint8_t *bamseq = bam_get_seq(b);
+  const uint8_t *bamqual = bam_get_qual(b);
 
   size_t i, j;
-  if(bam_is_rev(r->bam))
+  if(bam_is_rev(seq_read_bam(r)))
   {
     for(i = 0, j = qlen - 1; i < qlen; i++, j--)
     {
@@ -463,14 +466,14 @@ static inline seq_file_t* seq_open2(const char *p, bool issam,
   if(issam)
   {
     #ifdef _USESAM
-      if((sf->s_file = hts_open(p, "r")) == NULL) {
+      if((sf->hts_file = hts_open(p, "r")) == NULL) {
         seq_close(sf);
         return NULL;
       }
-      sf->bam_hdr = sam_hdr_read(sf->s_file);
+      sf->bam_hdr = sam_hdr_read(sf->hts_file);
       sf->readfunc = sf->origreadfunc = _seq_read_sam;
 
-      const htsFormat *hts_fmt = hts_get_format(sf->s_file);
+      const htsFormat *hts_fmt = hts_get_format(sf->hts_file);
       if(hts_fmt->format == sam) sf->format = SEQ_FMT_SAM;
       else if(hts_fmt->format == sam) sf->format = SEQ_FMT_BAM;
       else {
@@ -511,14 +514,14 @@ static inline seq_file_t* seq_dopen(int fd, char issam,
   if(issam)
   {
     #ifdef _USESAM
-      if((sf->s_file = hts_hopen(hdopen(fd, "r"), sf->path, "r")) == NULL) {
+      if((sf->hts_file = hts_hopen(hdopen(fd, "r"), sf->path, "r")) == NULL) {
         seq_close(sf);
         return NULL;
       }
-      sf->bam_hdr = sam_hdr_read(sf->s_file);
+      sf->bam_hdr = sam_hdr_read(sf->hts_file);
       sf->readfunc = sf->origreadfunc = _seq_read_sam;
 
-      const htsFormat *hts_fmt = hts_get_format(sf->s_file);
+      const htsFormat *hts_fmt = hts_get_format(sf->hts_file);
       if(hts_fmt->format == sam) sf->format = SEQ_FMT_SAM;
       else if(hts_fmt->format == sam) sf->format = SEQ_FMT_BAM;
       else {
@@ -580,8 +583,8 @@ static inline void seq_close(seq_file_t *sf)
   if(sf->f_file != NULL)  fclose(sf->f_file);
   if(sf->gz_file != NULL) gzclose(sf->gz_file);
   #ifdef _USESAM
-  if(sf->s_file != NULL)  hts_close(sf->s_file);
-  free(sf->bam_hdr);
+    if(sf->hts_file != NULL)  hts_close(sf->hts_file);
+    bam_hdr_destroy(sf->bam_hdr);
   #endif
   strm_buf_dealloc(&sf->in);
   free(sf->path);

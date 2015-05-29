@@ -26,6 +26,8 @@ typedef struct
   size_t begin, end, size;
 } StreamBuffer;
 
+#define strm_buf_init {.b = NULL, .begin = 0, .end = 0, .size = 0}
+
 // Buffer functions
 #ifndef ROUNDUP2POW
   #define ROUNDUP2POW(x) (0x1UL << (64 - __builtin_clzl(x)))
