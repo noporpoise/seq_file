@@ -77,8 +77,8 @@ static struct option longopts[] =
   {"rand",       required_argument, NULL, 'n'},
   {"names",      no_argument,       NULL, 'N'},
   {"lengths",    no_argument,       NULL, 'L'},
-  {"stat",       required_argument, NULL, 's'},
-  {"fast-stat",  required_argument, NULL, 'S'},
+  {"stat",       no_argument,       NULL, 's'},
+  {"fast-stat",  no_argument,       NULL, 'S'},
   {"rename",     required_argument, NULL, 'M'},
   {NULL, 0, NULL, 0}
 };
