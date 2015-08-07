@@ -580,8 +580,15 @@ static inline int seq_seek_start(seq_file_t *sf)
 // Close file handles, free resources
 static inline void seq_close(seq_file_t *sf)
 {
-  if(sf->f_file != NULL)  fclose(sf->f_file);
-  if(sf->gz_file != NULL) gzclose(sf->gz_file);
+  int e;
+  if(sf->f_file != NULL && (e = fclose(sf->f_file)) != 0) {
+    fprintf(stderr, "[%s:%i] Error closing file: %s [%i]\n", __FILE__, __LINE__,
+                    sf->path, e);
+  }
+  if(sf->gz_file != NULL && (e = gzclose(sf->gz_file)) != Z_OK) {
+    fprintf(stderr, "[%s:%i] Error closing gzfile: %s [%i]\n", __FILE__, __LINE__,
+                    sf->path, e);
+  }
   #ifdef _USESAM
     if(sf->hts_file != NULL)  hts_close(sf->hts_file);
     bam_hdr_destroy(sf->bam_hdr);
