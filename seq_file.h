@@ -96,10 +96,12 @@ struct read_struct
 static inline int seq_read_primary(seq_file_t *sf, read_t *r)
 {
   int s = seq_read(sf, r);
+#ifdef _USESAM
   if(s > 0 && r->from_sam) {
     while(s > 0 && seq_read_bam(r)->core.flag & (BAM_FSECONDARY|BAM_FSUPPLEMENTARY))
       s = seq_read(sf, r);
   }
+#endif
   return s;
 }
 
