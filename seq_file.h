@@ -90,6 +90,19 @@ struct read_struct
 // return 1 on success, 0 on eof, -1 if partially read / syntax error
 #define seq_read(sf,r) ((sf)->readfunc(sf,r))
 
+/**
+ * Fetch a read that is not a secondary or supplementary alignment
+ */
+static inline int seq_read_primary(seq_file_t *sf, read_t *r)
+{
+  int s = seq_read(sf, r);
+  if(s > 0 && r->from_sam) {
+    while(s > 0 && seq_read_bam(r)->core.flag & (BAM_FSECONDARY|BAM_FSUPPLEMENTARY))
+      s = seq_read(sf, r);
+  }
+  return s;
+}
+
 static inline void seq_close(seq_file_t *sf);
 
 // File format information (http://en.wikipedia.org/wiki/FASTQ_format)
@@ -195,7 +208,7 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *r)
   const uint8_t *bamqual = bam_get_qual(b);
 
   size_t i, j;
-  if(bam_is_rev(seq_read_bam(r)))
+  if(bam_is_rev(b))
   {
     for(i = 0, j = qlen - 1; i < qlen; i++, j--)
     {
@@ -215,7 +228,7 @@ static inline int _seq_read_sam(seq_file_t *sf, read_t *r)
   }
 
   r->seq.end = r->qual.end = qlen;
-  r->seq.b[qlen] = r->qual.b[qlen] = 0;
+  r->seq.b[qlen] = r->qual.b[qlen] = '\0';
   r->from_sam = true;
 
   return 1;
