@@ -490,7 +490,7 @@ static inline seq_file_t* seq_open2(const char *p, bool issam,
 
       const htsFormat *hts_fmt = hts_get_format(sf->hts_file);
       if(hts_fmt->format == sam) sf->format = SEQ_FMT_SAM;
-      else if(hts_fmt->format == sam) sf->format = SEQ_FMT_BAM;
+      else if(hts_fmt->format == bam) sf->format = SEQ_FMT_BAM;
       else {
         fprintf(stderr, "[%s:%i] Cannot identify hts file format\n",
                 __FILE__, __LINE__);
