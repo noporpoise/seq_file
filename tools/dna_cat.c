@@ -209,19 +209,19 @@ int dna_c_ncasecmp(const char *seq, size_t len)
   return 0;
 }
 
-static inline bool _print_rename_hdr(FILE *rename_fh, StreamBuffer *rnbuf,
+static inline bool _print_rename_hdr(FILE *rename_fh, seq_buf_t *rnbuf,
                                      seq_format fmt)
 {
   if((fmt == SEQ_FMT_FASTA || fmt == SEQ_FMT_FASTQ) && rename_fh)
   {
-    strm_buf_reset(rnbuf);
+    rnbuf->end = 0; rnbuf->b[0] = '\0';
     if(!freadline(rename_fh, &rnbuf->b, &rnbuf->end, &rnbuf->size)) return false;
-    strm_buf_chomp(rnbuf);
+    cbuf_chomp(rnbuf->b, &rnbuf->end);
 
     // Strip off @ or > char at beginning
-    if(rnbuf->begin < rnbuf->end &&
-       (rnbuf->b[rnbuf->begin] == '>' || rnbuf->b[rnbuf->begin] == '@')) {
-      rnbuf->begin++;
+    if(rnbuf->end && (rnbuf->b[0] == '>' || rnbuf->b[0] == '@')) {
+      memmove(rnbuf->b, rnbuf->b+1, --rnbuf->end);
+      rnbuf->b[rnbuf->end] = '\0';
     }
 
     return true;
@@ -262,7 +262,7 @@ static void process_read(read_t *r, uint8_t ops)
 // Returns format used
 static seq_format read_print(seq_file_t *sf, read_t *r,
                              seq_format fmt, uint8_t ops, size_t linewrap,
-                             FILE *rename_fh, StreamBuffer *rnbuf)
+                             FILE *rename_fh, seq_buf_t *rnbuf)
 {
   process_read(r, ops);
 
@@ -276,12 +276,10 @@ static seq_format read_print(seq_file_t *sf, read_t *r,
 
   /* Overwrite read name with rename buffer */
   if(_print_rename_hdr(rename_fh, rnbuf, fmt)) {
-    // StreamBuffer tmp = r->name; r->name = *rnbuf; *rnbuf = tmp;
-    size_t len = strm_buf_len(rnbuf);
-    strm_buf_ensure_capacity(&r->name, len);
-    memcpy(r->name.b, rnbuf->b+rnbuf->begin, len);
-    r->name.begin = 0;
-    r->name.b[r->name.end = len] = '\0';
+    // seq_buf_t tmp = r->name; r->name = *rnbuf; *rnbuf = tmp;
+    cbuf_capacity(&r->name.b, &r->name.size, rnbuf->end);
+    memcpy(r->name.b, rnbuf->b, rnbuf->end);
+    r->name.b[r->name.end = rnbuf->end] = '\0';
   }
 
   if(ops & OPS_NAME_ONLY) {
@@ -309,14 +307,14 @@ static seq_format read_print(seq_file_t *sf, read_t *r,
 
 static inline void _print_rnd_entries(const size_t *lens, size_t nentries,
                                       uint8_t fmt, size_t linewrap,
-                                      FILE *rename_fh, StreamBuffer *rnbuf)
+                                      FILE *rename_fh, seq_buf_t *rnbuf)
 {
   size_t i, j, k, rnd = 0;
 
   for(i = 0; i < nentries; i++)
   {
     if(_print_rename_hdr(rename_fh, rnbuf, fmt))
-      printf("%c%s\n", fmt == SEQ_FMT_FASTQ ? '@' : '>', rnbuf->b+rnbuf->begin);
+      printf("%c%s\n", fmt == SEQ_FMT_FASTQ ? '@' : '>', rnbuf->b);
     else if(fmt == SEQ_FMT_FASTA) printf(">rand%zu\n", i);
     else if(fmt == SEQ_FMT_FASTQ) printf("@rand%zu\n", i);
 
@@ -525,13 +523,15 @@ int main(int argc, char **argv)
     print_usage("Cannot use -s,--stat and -S--fast-stat together");
 
   FILE *rename_fh = NULL;
-  StreamBuffer rename_buf;
+  seq_buf_t rename_buf;
 
   if(rename_path) {
     if(strcmp(rename_path,"-") == 0) rename_fh = stdin;
     else if((rename_fh = fopen(rename_path, "r")) == NULL)
       die("Cannot open --rename file: %s", inpathstr(rename_path));
-    if(!strm_buf_alloc(&rename_buf, 1024)) die("Out of memory%c", '!');
+    rename_buf.size = 1024;
+    rename_buf.b = malloc(rename_buf.size);
+    if(!rename_buf.b) die("Out of memory%c", '!');
   }
 
   if(nrand_len) seed_random();
@@ -588,7 +588,7 @@ int main(int argc, char **argv)
 
   if(rename_fh) {
     fclose(rename_fh);
-    strm_buf_dealloc(&rename_buf);
+    free(rename_buf.b);
   }
 
   return EXIT_SUCCESS;
