@@ -155,7 +155,7 @@ static inline read_t* seq_read_alloc(read_t *r)
   r->name.b = malloc(256);
   r->seq.b  = malloc(256);
   r->qual.b = malloc(256);
-  r->name.size = r->name.size = r->name.size = 256;
+  r->name.size = r->seq.size = r->qual.size = 256;
 
   if(!r->name.b || !r->seq.b || !r->qual.b)
   {
