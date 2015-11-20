@@ -35,7 +35,7 @@ typedef enum
 {
   SEQ_FMT_UNKNOWN = 0,
   SEQ_FMT_PLAIN = 1, SEQ_FMT_FASTA = 2, SEQ_FMT_FASTQ = 4,
-  SEQ_FMT_SAM = 8, SEQ_FMT_BAM = 16,
+  SEQ_FMT_SAM = 8, SEQ_FMT_BAM = 16, SEQ_FMT_CRAM = 16
 } seq_format;
 
 typedef struct seq_file_struct seq_file_t;
@@ -80,6 +80,7 @@ struct read_struct
   #define seq_read_bam(r) ((bam1_t*)(r)->bam)
 #endif
 
+#define seq_is_cram(sf) ((sf)->format == SEQ_FMT_CRAM)
 #define seq_is_bam(sf) ((sf)->format == SEQ_FMT_BAM)
 #define seq_is_sam(sf) ((sf)->format == SEQ_FMT_SAM)
 #define seq_use_gzip(sf) ((sf)->gz_file != NULL)
@@ -437,7 +438,7 @@ static inline char _seq_setup(seq_file_t *sf, bool use_zlib, size_t buf_size)
   return 1;
 }
 
-#define NUM_SEQ_EXT 28
+#define NUM_SEQ_EXT 29
 
 // Guess file type from file path or contents
 static inline seq_format seq_guess_filetype_from_extension(const char *path)
@@ -449,7 +450,7 @@ static inline seq_format seq_guess_filetype_from_extension(const char *path)
        ".fq", ".fastq", ".fsq", ".fsq.gz", "fsq.gzip", // FASTQ
        ".fqz", ".fqgz", ".fq.gz", ".fq.gzip", ".fastqz", ".fastq.gzip",
        ".txt", ".txtgz", ".txt.gz", ".txt.gzip", // Plain
-       ".sam", ".bam"}; // SAM / BAM
+       ".sam", ".bam", ".cram"}; // SAM / BAM / CRAM
 
   const seq_format types[NUM_SEQ_EXT]
     = {SEQ_FMT_FASTA, SEQ_FMT_FASTA, SEQ_FMT_FASTA, SEQ_FMT_FASTA, SEQ_FMT_FASTA,
@@ -459,7 +460,7 @@ static inline seq_format seq_guess_filetype_from_extension(const char *path)
        SEQ_FMT_FASTQ, SEQ_FMT_FASTQ, SEQ_FMT_FASTQ, SEQ_FMT_FASTQ, SEQ_FMT_FASTQ,
        SEQ_FMT_FASTQ,
        SEQ_FMT_PLAIN, SEQ_FMT_PLAIN, SEQ_FMT_PLAIN, SEQ_FMT_PLAIN,
-       SEQ_FMT_SAM, SEQ_FMT_BAM};
+       SEQ_FMT_SAM, SEQ_FMT_BAM, SEQ_FMT_CRAM};
 
   size_t extlens[NUM_SEQ_EXT];
   size_t i;
@@ -475,13 +476,13 @@ static inline seq_format seq_guess_filetype_from_extension(const char *path)
 
 #undef NUM_SEQ_EXT
 
-static inline seq_file_t* seq_open2(const char *p, bool issam,
+static inline seq_file_t* seq_open2(const char *p, bool ishts,
                                     bool use_zlib, size_t buf_size)
 {
   seq_file_t *sf = calloc(1, sizeof(seq_file_t));
   sf->path = strdup(p);
 
-  if(issam)
+  if(ishts)
   {
     #ifdef _USESAM
       if((sf->hts_file = hts_open(p, "r")) == NULL) {
@@ -494,6 +495,7 @@ static inline seq_file_t* seq_open2(const char *p, bool issam,
       const htsFormat *hts_fmt = hts_get_format(sf->hts_file);
       if(hts_fmt->format == sam) sf->format = SEQ_FMT_SAM;
       else if(hts_fmt->format == bam) sf->format = SEQ_FMT_BAM;
+      else if(hts_fmt->format == cram) sf->format = SEQ_FMT_CRAM;
       else {
         fprintf(stderr, "[%s:%i] Cannot identify hts file format\n",
                 __FILE__, __LINE__);
@@ -523,13 +525,13 @@ static inline seq_file_t* seq_open2(const char *p, bool issam,
 // so you shouldn't call fclose(fh)
 // Returns NULL on error, in which case FILE will not have been closed (caller
 // should then call fclose(fh))
-static inline seq_file_t* seq_dopen(int fd, char issam,
+static inline seq_file_t* seq_dopen(int fd, char ishts,
                                     bool use_zlib, size_t buf_size)
 {
   seq_file_t *sf = calloc(1, sizeof(seq_file_t));
   sf->path = strdup("-");
 
-  if(issam)
+  if(ishts)
   {
     #ifdef _USESAM
       if((sf->hts_file = hts_hopen(hdopen(fd, "r"), sf->path, "r")) == NULL) {
@@ -541,7 +543,8 @@ static inline seq_file_t* seq_dopen(int fd, char issam,
 
       const htsFormat *hts_fmt = hts_get_format(sf->hts_file);
       if(hts_fmt->format == sam) sf->format = SEQ_FMT_SAM;
-      else if(hts_fmt->format == sam) sf->format = SEQ_FMT_BAM;
+      else if(hts_fmt->format == bam) sf->format = SEQ_FMT_BAM;
+      else if(hts_fmt->format == cram) sf->format = SEQ_FMT_CRAM;
       else {
         fprintf(stderr, "[%s:%i] Cannot identify hts file format\n",
                 __FILE__, __LINE__);
@@ -572,9 +575,9 @@ static inline seq_file_t* seq_open(const char *p)
   assert(p != NULL);
   if(strcmp(p,"-") == 0) return seq_dopen(fileno(stdin), 0, 1, 0);
 
-  seq_format format = seq_guess_filetype_from_extension(p);
-  bool issam = (format == SEQ_FMT_SAM || format == SEQ_FMT_BAM);
-  return seq_open2(p, issam, 1, DEFAULT_BUFSIZE);
+  seq_format fmt = seq_guess_filetype_from_extension(p);
+  bool ishts = (fmt == SEQ_FMT_SAM || fmt == SEQ_FMT_BAM || fmt == SEQ_FMT_CRAM);
+  return seq_open2(p, ishts, 1, DEFAULT_BUFSIZE);
 }
 
 /*
@@ -908,7 +911,7 @@ _seq_print_fastq(seq_gzprint_fastq,gzFile,gzputs2,gzputc2)
 // seq_read_free(read_t* r)
 
 // seq_open(path)
-// seq_open2(path,issam,use_gzip,buffer_size)
+// seq_open2(path,ishts,use_gzip,buffer_size)
 // seq_dopen(fileno(fh),use_gzip,buffer_size)
 // seq_close(seq_file_t *sf)
 
