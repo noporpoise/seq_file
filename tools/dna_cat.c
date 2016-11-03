@@ -60,7 +60,6 @@ const char usage[] = "  Read and manipulate dna sequence.\n"
 
 static struct option longopts[] =
 {
-// General options
   {"help",       no_argument,       NULL, 'h'},
   {"fasta",      no_argument,       NULL, 'F'},
   {"fastq",      no_argument,       NULL, 'Q'},

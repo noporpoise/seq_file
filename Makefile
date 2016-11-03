@@ -26,9 +26,13 @@ else
 	OPT = -O3
 endif
 
-all: bin/dnacat benchmarks dev
+all: bin/dnacat bin/dnademux benchmarks dev
 
 bin/dnacat: tools/dna_cat.c seq_file.h stream_buffer.h
+	mkdir -p bin
+	$(CC) $(CFLAGS) $(OPT) -o $@ $< $(LINKING) -lm
+
+bin/dnademux: tools/dna_demux.c seq_file.h stream_buffer.h
 	mkdir -p bin
 	$(CC) $(CFLAGS) $(OPT) -o $@ $< $(LINKING) -lm
 
