@@ -11,6 +11,7 @@ Nov 2016, Public Domain
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <getopt.h>
 
 #include "seq_file.h"
