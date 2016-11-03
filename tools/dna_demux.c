@@ -1,7 +1,7 @@
 /*
 https://github.com/noporpoise/seq_file
 Isaac Turner <turner.isaac@gmail.com>
-Jan 2014, Public Domain
+Nov 2016, Public Domain
 */
 
 // request decent POSIX version
@@ -108,7 +108,8 @@ int main(int argc, char **argv)
   }
 
   size_t nargs = argc - optind;
-  if(nargs != 2 && nargs != 3) print_usage("Need two output files");
+  if(nargs < 2) print_usage("Need two output files");
+  if(nargs > 3) print_usage("Can't have more than one input file");
 
   // open output files
   if(gzip_out) {
