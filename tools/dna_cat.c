@@ -344,7 +344,7 @@ static void file_stat(seq_file_t *sf, read_t *r, uint8_t ops, bool fast)
   if(ops & ~(OPS_UPPERCASE | OPS_LOWERCASE))
     print_usage("-s,--stat and -S,--fast-stat are not compatible with -r,-R,-C,-m");
 
-  printf("File: %s\n", inpathstr(sf->path));
+  printf("[dnacat] File: %s\n", inpathstr(sf->path));
 
   int minq = -1, maxq = -1, s, fmti;
 

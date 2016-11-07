@@ -134,7 +134,7 @@ int main(int argc, char **argv)
       else fmt = SEQ_FMT_FASTQ;
     }
     print_read(&r1, fh1, gz1);
-    if(!seq_read(sf, &r2)) { fprintf(stderr, "Odd number of reads\n"); }
+    if(!seq_read(sf, &r2)) { fprintf(stderr, "[dnademux] Odd number of reads\n"); }
     else print_read(&r2, fh2, gz2);
   }
 
